@@ -1,0 +1,60 @@
+================
+Moodle Operator
+================
+
+Deployment on Minikube
+-----------------------
+
+1) Build Moodle Operator Image 
+
+   - eval $(minikube docker-env)
+
+   - ./build-local-deploy-artifacts.sh
+
+2) Deploy Moodle Operator
+
+   - ./deploy.sh
+   - kubectl get pods
+
+3) Create Moodle Instance: Moodle1
+
+   - kubectl apply -f artifacts/moodle1.yaml
+
+   - As part of creating moodle instance, we install the 'profilecohort' plugin.
+     Check the custom resource specification in artifacts/moodle1.yaml
+
+4) Check Moodle Deployment
+
+   - kubectl describe moodles moodle1 (Initial Moodle deployment will take some time)
+   - kubectl get pods
+
+   - Once moodle1 instance is Ready, navigate to the moodle1 instance URL in the browser
+
+     - Login using "admin" and "password1" as credentials
+
+     - Once logged in you will see a message to update Moodle database for 'profilecohort' plugin
+
+       - Select that option to complete Plugin installation
+
+     - Navigate to -> Administration -> Plugins -> Plugins Overview
+
+     - You should see 'profilecohort' plugin in the 'Additional plugins' list
+
+5) Update Moodle Deployment to install new Plugin
+
+   - We will install 'wiris' plugin on 'moodle1' Moodle instance
+
+   - kubectl apply -f artifacts/update-moodle1.yaml
+
+   - Once moodle1 instance is Ready, refresh the URL
+
+       - You will see a message to update Moodle database for 'wiris' plugin
+
+       - Select that option to complete Plugin installation
+
+     - Navigate to -> Administration -> Plugins -> Plugins Overview
+
+     - You should see 'profilecohort' and 'wiris' plugins in the 'Additional plugins' list
+
+
+
