@@ -114,6 +114,11 @@ func (in *MoodleStatus) DeepCopyInto(out *MoodleStatus) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.UnsupportedPlugins != nil {
+		in, out := &in.UnsupportedPlugins, &out.UnsupportedPlugins
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 

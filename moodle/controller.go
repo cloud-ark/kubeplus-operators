@@ -3,15 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"log"
-	//"context"
-	//"strconv"
-	//"strings"
 	"time"
-	//"github.com/coreos/etcd/client"
-	//"encoding/json"
 
 	_ "github.com/lib/pq"
+	restclient "k8s.io/client-go/rest"
 
 	//apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,17 +26,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
-
-	//"k8s.io/client-go/tools/clientcmd"
-	"io/ioutil"
-
-	//"io"
-	//"net/http"
-
-	//"bytes"
-	//"compress/gzip"
-	//"archive/tar"
-	//"github.com/mholt/archiver"
 
 	operatorv1 "github.com/cloud-ark/kubeplus-operators/moodle/pkg/apis/moodlecontroller/v1"
 	clientset "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/clientset/versioned"
@@ -70,9 +54,10 @@ const (
 )
 
 var (
-	PGPASSWORD  = "mysecretpassword"
+	//PGPASSWORD  = "mysecretpassword"
 	//HOST_IP = os.Getenv("HOST_IP")
-	HOST_IP = "192.168.99.105"
+	//HOST_IP = "192.168.99.112"
+	HOST_IP = os.Getenv("HOST_IP")
 )
 
 func init() {
@@ -80,6 +65,7 @@ func init() {
 
 // Controller is the controller implementation for Foo resources
 type Controller struct {
+        cfg *restclient.Config
 	// kubeclientset is a standard kubernetes clientset
 	kubeclientset kubernetes.Interface
 	// sampleclientset is a clientset for our own API group
@@ -103,6 +89,7 @@ type Controller struct {
 
 // NewController returns a new sample controller
 func NewController(
+        cfg *restclient.Config,
 	kubeclientset kubernetes.Interface,
 	sampleclientset clientset.Interface,
 	kubeInformerFactory kubeinformers.SharedInformerFactory,
@@ -124,6 +111,7 @@ func NewController(
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
 	controller := &Controller{
+		cfg: cfg,
 		kubeclientset:     kubeclientset,
 		sampleclientset:   sampleclientset,
 		deploymentsLister: deploymentInformer.Lister(),
@@ -233,7 +221,9 @@ func (c *Controller) processNextWorkItem() bool {
 		}
 		// Finally, if no error occurs we Forget this item so it does not
 		// get queued again until another change happens.
+		//fmt.Println("processNextItem before forgetting")
 		c.workqueue.Forget(obj)
+		//fmt.Println("processNextItem after forgetting")
 		glog.Infof("Successfully synced '%s'", key)
 		return nil
 	}(obj)
@@ -332,29 +322,68 @@ func (c *Controller) syncHandler(key string) error {
 	fmt.Printf("Moodle Name:%s\n", moodleName)
 	fmt.Printf("Admin Password:%s\n", adminPassword)
 	fmt.Printf("Plugins:%v\n", plugins)
-	
-	//serviceIP, verifyCmd := c.deployMysql(foo)
-	//status := serviceIP + "\n" + verifyCmd
 
-	status := "Received"
-	url := "http://" + HOST_IP
-	//pluginsString := strings.Join(plugins, ", ")
-	
-	c.updateMoodleStatus(foo, status, url, &plugins)
+	var status, url string 
+	var supportedPlugins, unsupportedPlugins []string
+	initialDeployment := c.isInitialDeployment(foo)
+	if initialDeployment {
+		serviceIP, podName, unsupportedPlugins := c.deployMoodle(foo)
+		status = "Ready"
+		url = "http://" + serviceIP
+		fmt.Printf("Moodle URL:%s\n", url)
+		//pluginsString := strings.Join(plugins, ", ")
+		c.updateMoodleStatus(foo, podName, status, url, &plugins, &unsupportedPlugins)
+		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
+	} else {
+	       podName, installedPlugins, unsupportedPluginsCurrent := c.handlePluginDeployment(foo)
+	       if len(installedPlugins) > 0 || len(unsupportedPluginsCurrent) > 0 {
+	        status = "Ready"
+		url = foo.Status.Url
+		unsupportedPlugins = foo.Status.UnsupportedPlugins
+		unsupportedPlugins = appendList(unsupportedPluginsCurrent, unsupportedPlugins)
 
-	c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
+		supportedPlugins = foo.Status.InstalledPlugins
+		supportedPlugins = append(supportedPlugins, installedPlugins...)
+		
+		c.updateMoodleStatus(foo, podName, status, url, &supportedPlugins, &unsupportedPlugins)
+		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
+	       } else {
+	       	 fmt.Printf("Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
+	       }
+	}
 	return nil
 }
 
-func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, status string, url string, plugins *[]string) error {
+func appendList(source, destination []string) ([]string) {
+     var appendedList []string
+
+     for _, delem := range destination {
+     	 present := false
+	 for _, selem := range source {
+	     if delem == selem {
+	     	present = true
+		break
+	     }
+	 }
+	 if !present {
+	    appendedList = append(appendedList, delem)
+	 }
+     }
+     return appendedList
+}
+
+func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, status string, 
+     url string, plugins *[]string, unsupportedPlugins *[]string) error {
 	// NEVER modify objects from the store. It's a read-only, local cache.
 	// You can use DeepCopy() to make a deep copy of original object and modify this copy
 	// Or create a copy manually for better performance
 	fooCopy := foo.DeepCopy()
 
+	fooCopy.Status.PodName = podName
 	fooCopy.Status.Status = status
 	fooCopy.Status.Url = url
 	fooCopy.Status.InstalledPlugins = *plugins
+	fooCopy.Status.UnsupportedPlugins = *unsupportedPlugins
 	// Until #38113 is merged, we must use Update instead of UpdateStatus to
 	// update the Status block of the Foo resource. UpdateStatus will not
 	// allow changes to the Spec of the resource, which is ideal for ensuring
@@ -366,56 +395,4 @@ func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, status string, u
 	return err
 }
 
-
-//-----------------------------------------
-
-func createConfigMap(chartURL string, kubeclientset kubernetes.Interface) string {
-	fmt.Println("Entering createConfigMap")
-	//chartName, _ := parseChartNameVersion(chartURL)
-	chartName := ""
-
-	currentDir, err := os.Getwd()
-	//dirName := currentDir + "tmp/charts/" + chartName
-	dirName := currentDir + "/" + chartName
-
-	os.Chdir(dirName)
-	os.Chdir(chartName)
-	cwd, _ := os.Getwd()
-	fmt.Printf("dirName:%s\n", cwd)
-
-	//openapispecFile := dirName + "/openapispec.json"
-	openapispecFile := "openapispec.json"
-
-	//fmt.Printf("OpenAPI Spec file:%s\n", openapispecFile)
-
-    jsonContents, err := ioutil.ReadFile(openapispecFile)
-    jsonContents1 := string(jsonContents)
-	if err != nil {
-		log.Fatal(err)
-	}
-	//fmt.Printf("OpenAPISpec Contents:%s\n", jsonContents1)
-
-	os.Chdir(currentDir)
-
-	configMapToCreate := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: chartName,
-		},
-		Data: map[string]string{
-			"openapispec": jsonContents1,
-		},
-	}
-
-	_, err1 := kubeclientset.CoreV1().ConfigMaps("default").Create(configMapToCreate)
-	//fmt.Println("ConfigMap:%v", configMapCreated)
-
-	if err1 != nil {
-		//panic(err1)
-		fmt.Printf("Error:%s\n", err1.Error())
-	}
-
-	fmt.Println("Exiting createConfigMap")
-
-	return chartName
-}
 
