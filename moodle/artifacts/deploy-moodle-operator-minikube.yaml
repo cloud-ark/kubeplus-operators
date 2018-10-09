@@ -18,7 +18,7 @@ kind: CustomResourceDefinition
 metadata:
   name: moodles.moodlecontroller.kubeplus
   annotations:
-    composition: Deployment, Service
+    composition: Deployment, Service, PersistentVolume, PersistentVolumeClaim
 spec:
   group: moodlecontroller.kubeplus
   version: v1

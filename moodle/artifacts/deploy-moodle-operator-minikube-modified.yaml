@@ -50,7 +50,7 @@ spec:
         command: [ "/moodle"]
         env:
         - name: HOST_IP
-          value: 192.168.99.106
+          value: 192.168.99.107
         #env:
         #- name: HOST_IP
         #  valueFrom:
