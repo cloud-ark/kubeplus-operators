@@ -5,6 +5,31 @@ Moodle Operator
 Deployment on Minikube
 -----------------------
 
+0) Setup steps:
+
+   - Install Golang and set GOPATH environment variable to the folder where you
+     will store Go code.
+
+   - Add Path to Golang binary (which go / whereis go) to your PATH environment variable.
+
+   - Install Go's dep dependency management tool: https://github.com/golang/dep
+
+   - Clone this repository and put it inside 'src' directory of your GOPATH at following location:
+
+     $GOPATH/src/github.com/cloud-ark/kubeplus-operators
+
+     - mkdir -p $GOPATH/src/github.com/cloud-ark
+
+     - cd $GOPATH/src/github.com/cloud-ark/
+
+     - git clone https://github.com/cloud-ark/kubeplus-operators.git
+
+   - Install dependencies
+
+     - cd  $GOPATH/src/github.com/cloud-ark/kubeplus-operators/moodle
+
+     - dep ensure
+
 1) Build Moodle Operator Image 
 
    - eval $(minikube docker-env)
