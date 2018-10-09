@@ -30,6 +30,10 @@ Deployment on Minikube
 
      - dep ensure
 
+   - Start Minikube
+
+     - ./start-minikube.sh
+
 1) Build Moodle Operator Image 
 
    - eval $(minikube docker-env)
