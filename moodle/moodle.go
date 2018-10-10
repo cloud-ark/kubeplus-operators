@@ -119,6 +119,12 @@ func (c *Controller) exec(pluginName, moodlePodName, downloadLink, installFolder
 	fmt.Printf("Done installing plugin %s\n", pluginName)
 }
 
+/*
+  Reference for kubectl exec:
+  - https://github.com/a4abhishek/Client-Go-Examples/blob/master/exec_to_pod/exec_to_pod.go
+  - https://stackoverflow.com/questions/43314689/example-of-exec-in-k8ss-pod-by-using-go-client/43315545#43315545
+  - https://github.com/kubernetes/client-go/issues/204
+*/
 func (c *Controller) executeExecCall(moodlePodName, command string) {
 	fmt.Println("Inside executeExecCall")
 	req := c.kubeclientset.CoreV1().RESTClient().Post().
