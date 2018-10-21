@@ -21,7 +21,7 @@ metadata:
 spec:
   storageClassName: manual
   capacity:
-    storage: 2Gi
+    storage: 1Gi
   accessModes:
     - ReadWriteOnce
   hostPath:
@@ -38,7 +38,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 1Gi
 ---
 apiVersion: apps/v1beta2 # for versions before 1.9.0 use apps/v1beta2
 kind: Deployment
@@ -57,7 +57,7 @@ spec:
     spec:
       containers:
       - name: mysql
-        image: mysql:5.7
+        image: mysql:latest
         imagePullPolicy: IfNotPresent
         env:
         - name: MYSQL_ROOT_PASSWORD

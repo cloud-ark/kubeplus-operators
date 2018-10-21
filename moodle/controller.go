@@ -58,6 +58,7 @@ var (
 	//HOST_IP = os.Getenv("HOST_IP")
 	//HOST_IP = "192.168.99.112"
 	HOST_IP = os.Getenv("HOST_IP")
+	initialDeployment = true
 )
 
 func init() {
@@ -323,10 +324,13 @@ func (c *Controller) syncHandler(key string) error {
 	fmt.Printf("Admin Password:%s\n", adminPassword)
 	fmt.Printf("Plugins:%v\n", plugins)
 
+	
 	var status, url string 
 	var supportedPlugins, unsupportedPlugins []string
-	initialDeployment := c.isInitialDeployment(foo)
+	//initialDeployment := c.isInitialDeployment(foo)
+	
 	if initialDeployment {
+	   	initialDeployment = false
 		serviceIP, podName, unsupportedPlugins := c.deployMoodle(foo)
 		status = "Ready"
 		url = "http://" + serviceIP
