@@ -5,6 +5,14 @@ Moodle Operator
 Deployment on Minikube
 -----------------------
 
+Demo_
+
+.. _Demo: https://drive.google.com/file/d/1KAMk131mOD_UQXmxzOQ1j_Aqle2sW49M/view
+
+
+Try:
+-----
+
 0) Setup steps:
 
    - Install Golang and set GOPATH environment variable to the folder where you

@@ -6,11 +6,11 @@ MINIKUBE_IP=`minikube ip`
 
 echo "MINIKUBE IP:$MINIKUBE_IP"
 
-rm -f artifacts/deploy-moodle-operator-minikube-modified.yaml
+rm -f artifacts/deploy-moodle-operator.yaml
 
-sed "s/MINIKUBE_IP/$MINIKUBE_IP/g" artifacts/deploy-moodle-operator-minikube.yaml > artifacts/deploy-moodle-operator-minikube-modified.yaml
+sed "s/MINIKUBE_IP/$MINIKUBE_IP/g" artifacts/deploy-moodle-operator-minikube.yaml > artifacts/deploy-moodle-operator.yaml
 
-kubectl create -f artifacts/deploy-moodle-operator-minikube-modified.yaml
+kubectl create -f artifacts/deploy-moodle-operator.yaml
 
 echo "Done."
 
