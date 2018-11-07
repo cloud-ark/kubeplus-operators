@@ -48,12 +48,12 @@ spec:
         image: lmecld/moodle-operator:latest
         imagePullPolicy: IfNotPresent
         command: [ "/moodle"]
-        #env:
-        #- name: HOST_IP
-        #  value: 192.168.99.107
         env:
         - name: HOST_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
+          value: {{ .Values.HOST_IP }}
+        #env:
+        #- name: HOST_IP
+        #  valueFrom:
+        #    fieldRef:
+        #      fieldPath: status.hostIP
 
