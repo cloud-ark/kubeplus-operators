@@ -34,27 +34,35 @@ var (
 	}
 )
 
-func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, []string) {
+func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, []string, error) {
 	fmt.Println("Inside deployMoodle")
+	var serviceIP, servicePort, moodlePodName, serviceIPToReturn string
+	var supportedPlugins, unsupportedPlugins []string
+
 	c.createPersistentVolume(foo)
 	c.createPersistentVolumeClaim(foo)
-	c.createDeployment(foo)
-	serviceIP, servicePort, moodlePodName := c.createService(foo)
+	err := c.createDeployment(foo)
+	
+	if err != nil {
+	   return serviceIPToReturn, moodlePodName, unsupportedPlugins, err
+	}
+
+	serviceIP, servicePort, moodlePodName = c.createService(foo)
 
 	// Wait couple of seconds more just to give the Pod some more time.
 	time.Sleep(time.Second * 2)
 
 	plugins := foo.Spec.Plugins
 
-	supportedPlugins, unsupportedPlugins := c.getSupportedPlugins(plugins)
+	supportedPlugins, unsupportedPlugins = c.getSupportedPlugins(plugins)
 
 	if (len(supportedPlugins) > 0 ) {
 	   c.installPlugins(supportedPlugins, moodlePodName)
 	}
 
-	serviceIPToReturn := serviceIP + ":" + servicePort
+	serviceIPToReturn = serviceIP + ":" + servicePort
 	fmt.Println("Returning from deployMoodle")
-	return serviceIPToReturn, moodlePodName, unsupportedPlugins
+	return serviceIPToReturn, moodlePodName, unsupportedPlugins, nil
 }
 
 func (c *Controller) getSupportedPlugins(plugins []string) ([]string, []string) {
@@ -275,7 +283,7 @@ func (c *Controller) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
 }
 
 
-func (c *Controller) createDeployment(foo *operatorv1.Moodle) {
+func (c *Controller) createDeployment(foo *operatorv1.Moodle) error {
 
 	fmt.Println("Inside createDeployment")
 
@@ -285,6 +293,23 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) {
 	image := "lmecld/nginxformoodle6:latest"
 	volumeName := "moodle-data"
 	adminPassword := foo.Spec.AdminPassword
+
+	//MySQL Service IP and Port
+	mysqlServiceName := deploymentName + "-mysql"
+	mysqlServiceClient := c.kubeclientset.CoreV1().Services(apiv1.NamespaceDefault)
+	mysqlServiceResult, err := mysqlServiceClient.Get(mysqlServiceName, metav1.GetOptions{})
+
+	if err != nil {
+	   fmt.Printf("Error getting MySQL Service details: %v\n", err)
+	   return err
+	}
+
+	mysqlHostIP := mysqlServiceResult.Spec.ClusterIP
+	mysqlServicePortInt := mysqlServiceResult.Spec.Ports[0].Port
+	fmt.Println("MySQL Service Port int:%d\n", mysqlServicePortInt)
+	mysqlServicePort := fmt.Sprint(mysqlServicePortInt)
+	fmt.Println("MySQL Service Port:%d\n", mysqlServicePort)
+	fmt.Println("MySQL Host IP:%s\n", mysqlHostIP)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -357,7 +382,8 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) {
 								},
 								{
 									Name:  "MYSQL_HOST",
-									Value: HOST_IP,
+									Value: mysqlHostIP,
+									//Value: HOST_IP,
 									/*ValueFrom: &apiv1.EnvVarSource{
 									  FieldRef: &apiv1.ObjectFieldSelector{
 									      FieldPath: "status.hostIP",
@@ -366,7 +392,8 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) {
 								},
 								{
 									Name:  "MYSQL_PORT",
-									Value: MYSQL_PORT,
+									//Value: MYSQL_PORT,
+									Value: mysqlServicePort,
 								},
 								{
 									Name:  "MYSQL_TABLE_PREFIX",
@@ -421,6 +448,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) {
 		panic(err)
 	}
 	fmt.Printf("Created deployment %q.\n", result.GetObjectMeta().GetName())
+	return nil
 }
 
 
@@ -563,7 +591,12 @@ func (c *Controller) waitForPod(foo *operatorv1.Moodle) (string) {
 	for {
 		pods := c.getPods(deploymentName)
 		for _, d := range pods.Items {
-			if strings.Contains(d.Name, deploymentName) {
+		        parts := strings.Split(d.Name, "-")
+			parts = parts[:len(parts)-2]
+			podDepName := strings.Join(parts, "")
+			//fmt.Printf("Pod Deployment name:%s\n", podDepName)
+			//if strings.Contains(d.Name, deploymentName) {
+			if podDepName == deploymentName {
 			   	podName = d.Name
 				fmt.Printf("Moodle Pod Name:%s\n", podName)
 				podConditions := d.Status.Conditions
