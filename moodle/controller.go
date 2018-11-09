@@ -8,13 +8,10 @@ import (
 	_ "github.com/lib/pq"
 	restclient "k8s.io/client-go/rest"
 
-	//apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//apiutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/golang/glog"
-	//appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -33,7 +30,6 @@ import (
 	informers "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/informers/externalversions"
 	listers "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/listers/moodlecontroller/v1"
 
-	//apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 )
 
 const controllerAgentName = "moodle-controller"
@@ -54,11 +50,7 @@ const (
 )
 
 var (
-	//PGPASSWORD  = "mysecretpassword"
-	//HOST_IP = os.Getenv("HOST_IP")
-	//HOST_IP = "192.168.99.112"
 	HOST_IP = os.Getenv("HOST_IP")
-	initialDeployment = true
 )
 
 func init() {
@@ -327,16 +319,21 @@ func (c *Controller) syncHandler(key string) error {
 	
 	var status, url string 
 	var supportedPlugins, unsupportedPlugins []string
-	//initialDeployment := c.isInitialDeployment(foo)
+	initialDeployment := c.isInitialDeployment(foo)
 	
 	if initialDeployment {
-	   	initialDeployment = false
-		serviceIP, podName, unsupportedPlugins := c.deployMoodle(foo)
-		status = "Ready"
-		url = "http://" + serviceIP
-		fmt.Printf("Moodle URL:%s\n", url)
-		//pluginsString := strings.Join(plugins, ", ")
-		c.updateMoodleStatus(foo, podName, status, url, &plugins, &unsupportedPlugins)
+	        initialDeployment = false
+		serviceIP, podName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
+
+		if err != nil {
+		   status = "Error"
+		} else {
+		  status = "Ready"
+		  url = "http://" + serviceIP
+		  fmt.Printf("Moodle URL:%s\n", url)
+		}
+		correctlyInstalledPlugins := c.getDiff(plugins, erredPlugins)
+		c.updateMoodleStatus(foo, podName, status, url, &correctlyInstalledPlugins, &unsupportedPlugins)
 		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	} else {
 	       podName, installedPlugins, unsupportedPluginsCurrent := c.handlePluginDeployment(foo)
