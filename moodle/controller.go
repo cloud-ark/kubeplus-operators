@@ -323,6 +323,7 @@ func (c *Controller) syncHandler(key string) error {
 	
 	if initialDeployment {
 	        initialDeployment = false
+
 		serviceIP, podName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
 
 		if err != nil {
@@ -332,6 +333,7 @@ func (c *Controller) syncHandler(key string) error {
 		  url = "http://" + serviceIP
 		  fmt.Printf("Moodle URL:%s\n", url)
 		}
+
 		correctlyInstalledPlugins := c.getDiff(plugins, erredPlugins)
 		c.updateMoodleStatus(foo, podName, status, url, &correctlyInstalledPlugins, &unsupportedPlugins)
 		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
