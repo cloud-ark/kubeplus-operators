@@ -51,6 +51,8 @@ const (
 
 var (
 	HOST_IP = os.Getenv("HOST_IP")
+	MOODLE_PORT_BASE = 32000
+	MOODLE_PORT int
 )
 
 func init() {
@@ -322,6 +324,10 @@ func (c *Controller) syncHandler(key string) error {
 	initialDeployment := c.isInitialDeployment(foo)
 	
 	if initialDeployment {
+
+                MOODLE_PORT = MOODLE_PORT_BASE
+                MOODLE_PORT_BASE = MOODLE_PORT_BASE - 1
+
 	        initialDeployment = false
 
 		serviceIP, podName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
