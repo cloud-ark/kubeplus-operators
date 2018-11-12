@@ -3,6 +3,7 @@
 import (
         "fmt"
 	"strings"
+	"strconv"
 	"bytes"
 	"time"
 	"os"
@@ -306,7 +307,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) error {
 	deploymentsClient := c.kubeclientset.AppsV1().Deployments(apiv1.NamespaceDefault)
 
 	deploymentName := foo.Spec.Name
-	image := "lmecld/nginxformoodle6:latest"
+	image := "lmecld/nginxformoodle8:latest"
 	volumeName := "moodle-data"
 	adminPassword := foo.Spec.AdminPassword
 
@@ -326,6 +327,10 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) error {
 	mysqlServicePort := fmt.Sprint(mysqlServicePortInt)
 	fmt.Println("MySQL Service Port:%d\n", mysqlServicePort)
 	fmt.Println("MySQL Host IP:%s\n", mysqlHostIP)
+
+	//MOODLE_PORT := 32000
+	HOST_NAME := os.Getenv("HOST_IP") + ":" + strconv.Itoa(MOODLE_PORT)
+	fmt.Println("HOST_NAME:%s\n",HOST_NAME)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -366,7 +371,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) error {
 							}, 
 							Ports: []apiv1.ContainerPort{
 								{
-									ContainerPort: 80,
+									ContainerPort: int32(MOODLE_PORT),
 								},
 							},
 							ReadinessProbe: &apiv1.Probe{
@@ -422,8 +427,13 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) error {
 									Value: "abc@abc.com",
 								},
 								{
+									Name:  "MOODLE_PORT",
+									Value: strconv.Itoa(MOODLE_PORT),
+								},
+								{
 									Name:  "HOST_NAME",
-									Value: HOST_IP,
+									//Value: HOST_IP + ":" + string(MOODLE_PORT),
+									Value: HOST_NAME,
 									/*ValueFrom: &apiv1.EnvVarSource{
 									  FieldRef: &apiv1.ObjectFieldSelector{
 									      FieldPath: "status.hostIP",
@@ -471,6 +481,8 @@ func (c *Controller) createService(foo *operatorv1.Moodle) (string, string, stri
 	fmt.Println("Inside createService")
 	deploymentName := foo.Spec.Name
 
+	//MOODLE_PORT := 32000
+
 	serviceClient := c.kubeclientset.CoreV1().Services(apiv1.NamespaceDefault)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -491,9 +503,9 @@ func (c *Controller) createService(foo *operatorv1.Moodle) (string, string, stri
 			Ports: []apiv1.ServicePort{
 				{
 					Name:       "my-port",
-					Port:       80,
-					TargetPort: apiutil.FromInt(80),
-					NodePort: 80,
+					Port:       int32(MOODLE_PORT),
+					TargetPort: apiutil.FromInt(MOODLE_PORT),
+					NodePort: int32(MOODLE_PORT),
 					Protocol:   apiv1.ProtocolTCP,
 				},
 			},
