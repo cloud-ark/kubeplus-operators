@@ -329,6 +329,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) error {
 	fmt.Println("MySQL Host IP:%s\n", mysqlHostIP)
 
 	//MOODLE_PORT := 32000
+	CONTAINER_PORT := 80
 	HOST_NAME := os.Getenv("HOST_IP") + ":" + strconv.Itoa(MOODLE_PORT)
 	fmt.Println("HOST_NAME:%s\n",HOST_NAME)
 
@@ -365,15 +366,16 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) error {
 							Lifecycle: &apiv1.Lifecycle{
 								PostStart: &apiv1.Handler{
 								    Exec: &apiv1.ExecAction{
-								       Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh"},
+								       Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh; /usr/sbin/nginx -s reload"},
 								    },
 								},
 							}, 
 							Ports: []apiv1.ContainerPort{
 								{
-									ContainerPort: int32(MOODLE_PORT),
+									ContainerPort: int32(CONTAINER_PORT),
 								},
 							},
+							/*
 							ReadinessProbe: &apiv1.Probe{
 								Handler: apiv1.Handler{
 									TCPSocket: &apiv1.TCPSocketAction{
@@ -383,7 +385,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) error {
 								InitialDelaySeconds: 5,
 								TimeoutSeconds:      60,
 								PeriodSeconds:       2,
-							},
+							},*/
 							Env: []apiv1.EnvVar{
 								{
 									Name:  "APPLICATION_NAME",
