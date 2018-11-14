@@ -326,7 +326,7 @@ func (c *Controller) syncHandler(key string) error {
 	if initialDeployment {
 
                 MOODLE_PORT = MOODLE_PORT_BASE
-                MOODLE_PORT_BASE = MOODLE_PORT_BASE - 1
+                MOODLE_PORT_BASE = MOODLE_PORT_BASE + 1
 
 	        initialDeployment = false
 
