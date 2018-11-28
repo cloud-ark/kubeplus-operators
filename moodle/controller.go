@@ -29,7 +29,6 @@ import (
 	operatorscheme "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/clientset/versioned/scheme"
 	informers "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/informers/externalversions"
 	listers "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/listers/moodlecontroller/v1"
-
 )
 
 const controllerAgentName = "moodle-controller"
@@ -50,9 +49,11 @@ const (
 )
 
 var (
-	HOST_IP = os.Getenv("HOST_IP")
+	HOST_IP          = os.Getenv("HOST_IP")
 	MOODLE_PORT_BASE = 32000
-	MOODLE_PORT int
+	MOODLE_PORT      int
+	SERVICE_CREATED = false
+	serviceIP, servicePort string
 )
 
 func init() {
@@ -60,7 +61,7 @@ func init() {
 
 // Controller is the controller implementation for Foo resources
 type Controller struct {
-        cfg *restclient.Config
+	cfg *restclient.Config
 	// kubeclientset is a standard kubernetes clientset
 	kubeclientset kubernetes.Interface
 	// sampleclientset is a clientset for our own API group
@@ -68,7 +69,7 @@ type Controller struct {
 
 	deploymentsLister appslisters.DeploymentLister
 	deploymentsSynced cache.InformerSynced
-	moodleLister        listers.MoodleLister
+	moodleLister      listers.MoodleLister
 	foosSynced        cache.InformerSynced
 
 	// workqueue is a rate limited work queue. This is used to queue work to be
@@ -84,7 +85,7 @@ type Controller struct {
 
 // NewController returns a new sample controller
 func NewController(
-        cfg *restclient.Config,
+	cfg *restclient.Config,
 	kubeclientset kubernetes.Interface,
 	sampleclientset clientset.Interface,
 	kubeInformerFactory kubeinformers.SharedInformerFactory,
@@ -106,7 +107,7 @@ func NewController(
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
 	controller := &Controller{
-		cfg: cfg,
+		cfg:               cfg,
 		kubeclientset:     kubeclientset,
 		sampleclientset:   sampleclientset,
 		deploymentsLister: deploymentInformer.Lister(),
@@ -284,7 +285,6 @@ func (c *Controller) handleObject(obj interface{}) {
 	}
 }
 
-
 // syncHandler compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the Foo resource
 // with the current status of the resource.
@@ -318,71 +318,70 @@ func (c *Controller) syncHandler(key string) error {
 	fmt.Printf("Admin Password:%s\n", adminPassword)
 	fmt.Printf("Plugins:%v\n", plugins)
 
-	
-	var status, url string 
+	var status, url string
 	var supportedPlugins, unsupportedPlugins []string
 	initialDeployment := c.isInitialDeployment(foo)
-	
+
 	if initialDeployment {
 
-                MOODLE_PORT = MOODLE_PORT_BASE
-                MOODLE_PORT_BASE = MOODLE_PORT_BASE + 1
+		MOODLE_PORT = MOODLE_PORT_BASE
+		MOODLE_PORT_BASE = MOODLE_PORT_BASE + 1
 
-	        initialDeployment = false
+		initialDeployment = false
 
 		serviceIP, podName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
 
 		if err != nil {
-		   status = "Error"
+			status = "Error"
 		} else {
-		  status = "Ready"
-		  url = "http://" + serviceIP
-		  fmt.Printf("Moodle URL:%s\n", url)
+			status = "Ready"
+			url = "http://" + serviceIP
+			fmt.Printf("Moodle URL:%s\n", url)
 		}
 
 		correctlyInstalledPlugins := c.getDiff(plugins, erredPlugins)
 		c.updateMoodleStatus(foo, podName, status, url, &correctlyInstalledPlugins, &unsupportedPlugins)
 		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	} else {
-	       podName, installedPlugins, unsupportedPluginsCurrent := c.handlePluginDeployment(foo)
-	       if len(installedPlugins) > 0 || len(unsupportedPluginsCurrent) > 0 {
-	        status = "Ready"
-		url = foo.Status.Url
-		unsupportedPlugins = foo.Status.UnsupportedPlugins
-		unsupportedPlugins = appendList(unsupportedPluginsCurrent, unsupportedPlugins)
+		podName, installedPlugins, unsupportedPluginsCurrent := c.handlePluginDeployment(foo)
+		if len(installedPlugins) > 0 || len(unsupportedPluginsCurrent) > 0 {
+			status = "Ready"
+			url = foo.Status.Url
+			unsupportedPlugins = foo.Status.UnsupportedPlugins
+			unsupportedPlugins = appendList(unsupportedPluginsCurrent, unsupportedPlugins)
 
-		supportedPlugins = foo.Status.InstalledPlugins
-		supportedPlugins = append(supportedPlugins, installedPlugins...)
-		
-		c.updateMoodleStatus(foo, podName, status, url, &supportedPlugins, &unsupportedPlugins)
-		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
-	       } else {
-	       	 fmt.Printf("Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
-	       }
+			supportedPlugins = foo.Status.InstalledPlugins
+			supportedPlugins = append(supportedPlugins, installedPlugins...)
+
+			c.updateMoodleStatus(foo, podName, status, url, &supportedPlugins, &unsupportedPlugins)
+			c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
+		} else {
+			fmt.Printf("Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
+		}
 	}
 	return nil
 }
 
-func appendList(source, destination []string) ([]string) {
-     var appendedList []string
+func appendList(source, destination []string) []string {
+	var appendedList []string
 
-     for _, delem := range destination {
-     	 present := false
-	 for _, selem := range source {
-	     if delem == selem {
-	     	present = true
-		break
-	     }
-	 }
-	 if !present {
-	    appendedList = append(appendedList, delem)
-	 }
-     }
-     return appendedList
+	for _, delem := range destination {
+		present := false
+		for _, selem := range source {
+			if delem == selem {
+				present = true
+				break
+			}
+		}
+		if !present {
+			appendedList = append(appendedList, delem)
+		}
+	}
+	return appendedList
 }
 
-func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, status string, 
-     url string, plugins *[]string, unsupportedPlugins *[]string) error {
+func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, status string,
+	url string, plugins *[]string, unsupportedPlugins *[]string) error {
 	// NEVER modify objects from the store. It's a read-only, local cache.
 	// You can use DeepCopy() to make a deep copy of original object and modify this copy
 	// Or create a copy manually for better performance
@@ -403,5 +402,3 @@ func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, status 
 	}
 	return err
 }
-
-
