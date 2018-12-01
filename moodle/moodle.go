@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	apiutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/remotecommand"
-	//"os"
 	"strconv"
 	"strings"
 	"time"
@@ -37,22 +36,20 @@ var (
 
 func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, []string, []string, error) {
 	fmt.Println("Inside deployMoodle")
-	var moodlePodName, serviceIPToReturn string
+	var moodlePodName, serviceURIToReturn string
 	var supportedPlugins, unsupportedPlugins, erredPlugins []string
 
 	c.createPersistentVolume(foo)
 	c.createPersistentVolumeClaim(foo)
 
-	//if !SERVICE_CREATED {
-	   serviceIP, servicePort = c.createService(foo)
-	   SERVICE_CREATED = true
-	//}
+	servicePort := c.createService(foo)
+
 	c.createIngress(foo)
 
 	err, moodlePodName := c.createDeployment(foo)
 
 	if err != nil {
-		return serviceIPToReturn, moodlePodName, unsupportedPlugins, erredPlugins, err
+		return serviceURIToReturn, moodlePodName, unsupportedPlugins, erredPlugins, err
 	}
 
 	// Wait couple of seconds more just to give the Pod some more time.
@@ -66,11 +63,10 @@ func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, []str
 		erredPlugins = c.installPlugins(supportedPlugins, moodlePodName)
 	}
 
-	//serviceIPToReturn = serviceIP + ":" + servicePort
-	serviceIPToReturn = foo.Spec.Name + ":" + servicePort
+	serviceURIToReturn = foo.Spec.Name + ":" + servicePort
 	fmt.Println("Returning from deployMoodle")
 
-	return serviceIPToReturn, moodlePodName, unsupportedPlugins, erredPlugins, nil
+	return serviceURIToReturn, moodlePodName, unsupportedPlugins, erredPlugins, nil
 }
 
 func (c *Controller) getSupportedPlugins(plugins []string) ([]string, []string) {
@@ -162,7 +158,6 @@ func (c *Controller) executeExecCall(moodlePodName, command string) bool {
 
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
-		//panic(err)
 		success = false
 	}
 
@@ -178,8 +173,6 @@ func (c *Controller) executeExecCall(moodlePodName, command string) bool {
 
 	exec, err := remotecommand.NewSPDYExecutor(c.cfg, "POST", req.URL())
 	if err != nil {
-		//return "", fmt.Errorf("failed to init executor: %v", err)
-		//panic(err)
 		success = false
 	}
 
@@ -196,22 +189,18 @@ func (c *Controller) executeExecCall(moodlePodName, command string) bool {
 	})
 
 	if err != nil {
-		//return "", fmt.Errorf("could not execute: %v", err)
-		//panic(err)
 		success = false
 	}
 
 	responseString := execOut.String()
-
 	fmt.Printf("Output:%v\n", responseString)
-
 	return success
 }
 
 func (c *Controller) createIngress(foo *operatorv1.Moodle) {
      
      moodleName := foo.Spec.Name
-     //moodleHost := os.Getenv("HOST_IP")
+
      moodlePath := "/" + moodleName
      moodleServiceName := moodleName
      moodlePort := MOODLE_PORT
@@ -231,7 +220,6 @@ func (c *Controller) createIngress(foo *operatorv1.Moodle) {
 		Spec: extensionsv1beta1.IngressSpec{
 		      Rules: []extensionsv1beta1.IngressRule{
 		      	     {
-				//Host: moodleHost,
 				IngressRuleValue: extensionsv1beta1.IngressRuleValue{
 				    HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
 				    	  Paths: []extensionsv1beta1.HTTPIngressPath{
@@ -304,7 +292,6 @@ func (c *Controller) createPersistentVolume(foo *operatorv1.Moodle) {
 		panic(err)
 	}
 	fmt.Printf("Created persistentVolume %q.\n", result.GetObjectMeta().GetName())
-
 }
 
 func (c *Controller) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
@@ -382,7 +369,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string) {
 	fmt.Println("MySQL Host IP:%s\n", mysqlHostIP)
 
 	CONTAINER_PORT := MOODLE_PORT
-	//HOST_NAME := os.Getenv("HOST_IP") + ":" + strconv.Itoa(MOODLE_PORT_BASE) + "/" + deploymentName
+
 	HOST_NAME := deploymentName + ":" + strconv.Itoa(MOODLE_PORT)
 	fmt.Println("HOST_NAME:%s\n", HOST_NAME)
 
@@ -531,7 +518,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string) {
 	return nil, moodlePodName
 }
 
-func (c *Controller) createService(foo *operatorv1.Moodle) (string, string) {
+func (c *Controller) createService(foo *operatorv1.Moodle) (string) {
 
 	fmt.Println("Inside createService")
 	deploymentName := foo.Spec.Name
@@ -582,18 +569,17 @@ func (c *Controller) createService(foo *operatorv1.Moodle) (string, string) {
 	servicePort := fmt.Sprint(moodlePort)
 
 	// Parse ServiceIP and Port
-	// serviceIP := os.Getenv("HOST_IP")
 	serviceIP := result1.Spec.ClusterIP
-	fmt.Println("HOST IP:%s", serviceIP)
+	fmt.Println("Moodle Service IP:%s", serviceIP)
 
 	//servicePortInt := result1.Spec.Ports[0].Port
 	//servicePort := fmt.Sprint(servicePortInt)
 
-	serviceIPToReturn := serviceIP + ":" + servicePort
+	serviceURI := serviceIP + ":" + servicePort
 
-	fmt.Printf("Service IP to Return:%s\n", serviceIPToReturn)
+	fmt.Printf("Service URI%s\n", serviceURI)
 
-	return serviceIP, servicePort
+	return servicePort
 }
 
 func (c *Controller) handlePluginDeployment(foo *operatorv1.Moodle) (string, []string, []string) {
@@ -677,7 +663,6 @@ func (c *Controller) waitForPod(foo *operatorv1.Moodle) string {
 			parts = parts[:len(parts)-2]
 			podDepName := strings.Join(parts, "")
 			//fmt.Printf("Pod Deployment name:%s\n", podDepName)
-			//if strings.Contains(d.Name, deploymentName) {
 			if podDepName == deploymentName {
 				podName = d.Name
 				fmt.Printf("Moodle Pod Name:%s\n", podName)
