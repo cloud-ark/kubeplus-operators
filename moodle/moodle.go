@@ -66,7 +66,8 @@ func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, []str
 		erredPlugins = c.installPlugins(supportedPlugins, moodlePodName)
 	}
 
-	serviceIPToReturn = serviceIP + ":" + servicePort
+	//serviceIPToReturn = serviceIP + ":" + servicePort
+	serviceIPToReturn = foo.Spec.Name + ":" + servicePort
 	fmt.Println("Returning from deployMoodle")
 
 	return serviceIPToReturn, moodlePodName, unsupportedPlugins, erredPlugins, nil
