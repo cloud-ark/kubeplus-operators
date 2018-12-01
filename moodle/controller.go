@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -49,11 +48,8 @@ const (
 )
 
 var (
-	HOST_IP          = os.Getenv("HOST_IP")
 	MOODLE_PORT_BASE = 32000
 	MOODLE_PORT      int
-	SERVICE_CREATED = false
-	serviceIP, servicePort string
 )
 
 func init() {
@@ -329,13 +325,13 @@ func (c *Controller) syncHandler(key string) error {
 
 		initialDeployment = false
 
-		serviceIP, podName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
+		serviceURL, podName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
 
 		if err != nil {
 			status = "Error"
 		} else {
 			status = "Ready"
-			url = "http://" + serviceIP
+			url = "http://" + serviceURL
 			fmt.Printf("Moodle URL:%s\n", url)
 		}
 
