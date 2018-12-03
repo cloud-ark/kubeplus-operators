@@ -22,7 +22,7 @@ type Moodle struct {
 // +k8s:openapi-gen=true
 type MoodleSpec struct {
 	Name string `json:"name"`
-	AdminPassword string `json:"adminPassword"`
+	//Comma separated list of plugin names from: https://moodle.org/plugins/
 	Plugins []string `json:"plugins"`
 }
 
@@ -30,6 +30,7 @@ type MoodleSpec struct {
 // +k8s:openapi-gen=true
 type MoodleStatus struct {
         PodName string `json:"podName"`
+        SecretName string `json:"secretName"`
 	Status string `json:"status"`
 	Url string `json:"url"`
 	InstalledPlugins []string `json:"installedPlugins"`

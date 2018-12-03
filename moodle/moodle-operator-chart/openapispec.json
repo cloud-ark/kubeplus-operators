@@ -33,17 +33,14 @@
     "description": "MoodleSpec is the spec for a MoodleSpec resource",
     "required": [
      "name",
-     "adminPassword",
      "plugins"
     ],
     "properties": {
-     "adminPassword": {
-      "type": "string"
-     },
      "name": {
       "type": "string"
      },
      "plugins": {
+      "description": "Comma separated list of plugin names from: https://moodle.org/plugins/",
       "type": "array",
       "items": {
        "type": "string"
@@ -55,6 +52,7 @@
     "description": "MoodleStatus is the status for a Moodle resource",
     "required": [
      "podName",
+     "secretName",
      "status",
      "url",
      "installedPlugins",
@@ -68,6 +66,9 @@
       }
      },
      "podName": {
+      "type": "string"
+     },
+     "secretName": {
       "type": "string"
      },
      "status": {
