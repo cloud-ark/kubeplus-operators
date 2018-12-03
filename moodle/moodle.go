@@ -6,7 +6,6 @@ import (
 	operatorv1 "github.com/cloud-ark/kubeplus-operators/moodle/pkg/apis/moodlecontroller/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
-	corev1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"math/rand"
 )
 
 var (
@@ -34,7 +34,7 @@ var (
 	}
 )
 
-func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, []string, []string, error) {
+func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, string, []string, []string, error) {
 	fmt.Println("Inside deployMoodle")
 	var moodlePodName, serviceURIToReturn string
 	var supportedPlugins, unsupportedPlugins, erredPlugins []string
@@ -46,10 +46,10 @@ func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, []str
 
 	c.createIngress(foo)
 
-	err, moodlePodName := c.createDeployment(foo)
+	err, moodlePodName, secretName := c.createDeployment(foo)
 
 	if err != nil {
-		return serviceURIToReturn, moodlePodName, unsupportedPlugins, erredPlugins, err
+		return serviceURIToReturn, moodlePodName, secretName, unsupportedPlugins, erredPlugins, err
 	}
 
 	// Wait couple of seconds more just to give the Pod some more time.
@@ -66,7 +66,7 @@ func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, []str
 	serviceURIToReturn = foo.Spec.Name + ":" + servicePort
 	fmt.Println("Returning from deployMoodle")
 
-	return serviceURIToReturn, moodlePodName, unsupportedPlugins, erredPlugins, nil
+	return serviceURIToReturn, moodlePodName, secretName, unsupportedPlugins, erredPlugins, nil
 }
 
 func (c *Controller) getSupportedPlugins(plugins []string) ([]string, []string) {
@@ -157,12 +157,12 @@ func (c *Controller) executeExecCall(moodlePodName, command string) bool {
 		SubResource("exec")
 
 	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		success = false
 	}
 
 	parameterCodec := runtime.NewParameterCodec(scheme)
-	req.VersionedParams(&corev1.PodExecOptions{
+	req.VersionedParams(&apiv1.PodExecOptions{
 		Command:   strings.Fields(command),
 		Container: CONTAINER_NAME,
 		//Stdin:     stdin != nil,
@@ -195,6 +195,42 @@ func (c *Controller) executeExecCall(moodlePodName, command string) bool {
 	responseString := execOut.String()
 	fmt.Printf("Output:%v\n", responseString)
 	return success
+}
+
+func (c *Controller) generatePassword(moodlePort int) string {
+     seed := moodlePort
+     rand.Seed(int64(seed))
+     mina := 97
+     maxa := 122
+     minA := 65
+     maxA := 90
+     min0 := 48
+     max0 := 57
+     length := 8
+
+     password := make([]string, length)     
+ 
+     i := 0
+     for i < length {
+         charSet := rand.Intn(3)
+         if charSet == 0 {
+            passwordInt := rand.Intn(maxa - mina) + mina
+            password[i] = string(passwordInt)
+         }
+         if charSet == 1 {
+            passwordInt := rand.Intn(maxA - minA) + minA
+            password[i] = string(passwordInt)
+         }
+         if charSet == 2 {
+            passwordInt := rand.Intn(max0 - min0) + min0
+            password[i] = string(passwordInt)
+         }       
+         i++
+     }
+     passwordString := strings.Join(password,"")
+     fmt.Printf("Generated Password:%s\n", passwordString)
+
+     return passwordString
 }
 
 func (c *Controller) createIngress(foo *operatorv1.Moodle) {
@@ -337,7 +373,7 @@ func (c *Controller) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
 	fmt.Printf("Created persistentVolumeClaim %q.\n", result.GetObjectMeta().GetName())
 }
 
-func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string) {
+func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, string) {
 
 	fmt.Println("Inside createDeployment")
 
@@ -349,7 +385,10 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string) {
 	image := "lmecld/nginxformoodle8:latest"
 	//image := "lmecld/nginxformoodle6:latest"
 	volumeName := "moodle-data"
-	adminPassword := foo.Spec.AdminPassword
+
+	adminPassword := c.generatePassword(MOODLE_PORT)
+
+	secretName := c.createSecret(foo, adminPassword)
 
 	//MySQL Service IP and Port
 	mysqlServiceName := deploymentName + "-mysql"
@@ -358,7 +397,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string) {
 
 	if err != nil {
 		fmt.Printf("Error getting MySQL Service details: %v\n", err)
-		return err, ""
+		return err, "", secretName
 	}
 
 	mysqlHostIP := mysqlServiceResult.Spec.ClusterIP
@@ -515,7 +554,46 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string) {
 
 	moodlePodName := c.waitForPod(foo)
 
-	return nil, moodlePodName
+	return nil, moodlePodName, secretName
+}
+
+func (c *Controller) createSecret(foo *operatorv1.Moodle, adminPassword string) string {
+
+        fmt.Println("Inside createSecret")
+        secretName := foo.Spec.Name
+
+	fmt.Printf("Secret Name:%s\n", secretName)
+	fmt.Printf("Admin Password:%s\n", adminPassword)
+	
+        secret := &apiv1.Secret{
+                ObjectMeta: metav1.ObjectMeta{
+                        Name: secretName,
+                        OwnerReferences: []metav1.OwnerReference{
+                                {
+                                        APIVersion: API_VERSION,
+                                        Kind:       MOODLE_KIND,
+                                        Name:       foo.Name,
+                                        UID:        foo.UID,
+                                },
+                        },
+                        Labels: map[string]string{
+                                "secret": secretName,
+                        },
+                },
+                Data: map[string][]byte {
+		      "adminPassword": []byte(adminPassword),
+		},
+        }
+
+        secretsClient := c.kubeclientset.CoreV1().Secrets(apiv1.NamespaceDefault)
+
+        fmt.Println("Creating secrets..")
+	result, err := secretsClient.Create(secret)
+        if err != nil {
+	   panic(err)
+	}
+        fmt.Printf("Created Secret %q.\n", result.GetObjectMeta().GetName())
+	return secretName
 }
 
 func (c *Controller) createService(foo *operatorv1.Moodle) (string) {
@@ -668,8 +746,8 @@ func (c *Controller) waitForPod(foo *operatorv1.Moodle) string {
 				fmt.Printf("Moodle Pod Name:%s\n", podName)
 				podConditions := d.Status.Conditions
 				for _, podCond := range podConditions {
-					if podCond.Type == corev1.PodReady {
-						if podCond.Status == corev1.ConditionTrue {
+					if podCond.Type == apiv1.PodReady {
+						if podCond.Status == apiv1.ConditionTrue {
 							fmt.Println("Moodle Pod is running.")
 							podReady = true
 							break

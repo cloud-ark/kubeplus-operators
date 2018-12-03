@@ -307,11 +307,11 @@ func (c *Controller) syncHandler(key string) error {
 	fmt.Println("**************************************")
 
 	moodleName := foo.Spec.Name
-	adminPassword := foo.Spec.AdminPassword
+
 	plugins := foo.Spec.Plugins
 
 	fmt.Printf("Moodle Name:%s\n", moodleName)
-	fmt.Printf("Admin Password:%s\n", adminPassword)
+
 	fmt.Printf("Plugins:%v\n", plugins)
 
 	var status, url string
@@ -325,7 +325,7 @@ func (c *Controller) syncHandler(key string) error {
 
 		initialDeployment = false
 
-		serviceURL, podName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
+		serviceURL, podName, secretName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
 
 		if err != nil {
 			status = "Error"
@@ -336,7 +336,7 @@ func (c *Controller) syncHandler(key string) error {
 		}
 
 		correctlyInstalledPlugins := c.getDiff(plugins, erredPlugins)
-		c.updateMoodleStatus(foo, podName, status, url, &correctlyInstalledPlugins, &unsupportedPlugins)
+		c.updateMoodleStatus(foo, podName, secretName, status, url, &correctlyInstalledPlugins, &unsupportedPlugins)
 		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	} else {
 		podName, installedPlugins, unsupportedPluginsCurrent := c.handlePluginDeployment(foo)
@@ -349,7 +349,7 @@ func (c *Controller) syncHandler(key string) error {
 			supportedPlugins = foo.Status.InstalledPlugins
 			supportedPlugins = append(supportedPlugins, installedPlugins...)
 
-			c.updateMoodleStatus(foo, podName, status, url, &supportedPlugins, &unsupportedPlugins)
+			c.updateMoodleStatus(foo, podName, "", status, url, &supportedPlugins, &unsupportedPlugins)
 			c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 		} else {
 			fmt.Printf("Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
@@ -376,7 +376,7 @@ func appendList(source, destination []string) []string {
 	return appendedList
 }
 
-func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, status string,
+func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, secretName, status string,
 	url string, plugins *[]string, unsupportedPlugins *[]string) error {
 	// NEVER modify objects from the store. It's a read-only, local cache.
 	// You can use DeepCopy() to make a deep copy of original object and modify this copy
@@ -384,6 +384,9 @@ func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, status 
 	fooCopy := foo.DeepCopy()
 
 	fooCopy.Status.PodName = podName
+	if secretName != "" {
+	   fooCopy.Status.SecretName = secretName
+	}
 	fooCopy.Status.Status = status
 	fooCopy.Status.Url = url
 	fooCopy.Status.InstalledPlugins = *plugins
