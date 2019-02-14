@@ -13,94 +13,28 @@ Demo_
 Try:
 -----
 
-0) Setup steps:
-
-   - Install Golang and set GOPATH environment variable to the folder where you
-     will store Go code.
-
-   - Add Path to Golang binary (which go / whereis go) to your PATH environment variable.
-
-   - Install Go's dep dependency management tool: https://github.com/golang/dep
-
-   - Clone this repository and put it inside 'src' directory of your GOPATH at following location:
-
-     $GOPATH/src/github.com/cloud-ark/kubeplus-operators
-
-     - mkdir -p $GOPATH/src/github.com/cloud-ark
-
-     - cd $GOPATH/src/github.com/cloud-ark/
-
-     - git clone https://github.com/cloud-ark/kubeplus-operators.git
-
-   - Install dependencies
-
-     - cd  $GOPATH/src/github.com/cloud-ark/kubeplus-operators/moodle
-
-     - dep ensure
-
-   - Start Minikube
-
-     - ./start-minikube.sh
-
-1) Build Moodle Operator Image 
-
-   - ./build-local-deploy-artifacts.sh
-
-2) Deploy MySQL
-
-   - ./deploy-mysql.sh
-
-   - kubectl get pods
-
-Once MySQL Pod is running, 
-
-3) Deploy Moodle Operator
-
-   - ./deploy-moodle-operator.sh
-
-   - kubectl get pods
-
-Once moodle-operator Pod is running,
-
-4) Create Moodle Instance: Moodle1
-
-   - kubectl apply -f artifacts/moodle1.yaml
-
-   - As part of creating moodle instance, we install the 'profilecohort' plugin.
-     Check the custom resource specification in artifacts/moodle1.yaml
-
-5) Check Moodle Deployment
-
-   - kubectl get pods
-   - kubectl describe moodles moodle1 (Initial Moodle deployment will take some time)
-
-   - Once moodle1 instance is Ready, navigate to the moodle1 instance URL in the browser
-
-     - Login using "admin" and "password1" as credentials
-
-     - Once logged in you will see a message to update Moodle database for 'profilecohort' plugin
-
-       - Select that option to complete Plugin installation
-
-     - Navigate to -> Administration -> Plugins -> Plugins Overview
-
-     - You should see 'profilecohort' plugin in the 'Additional plugins' list
-
-6) Update Moodle Deployment to install new Plugin
-
-   - We will install 'wiris' plugin on 'moodle1' Moodle instance
-
-   - kubectl apply -f artifacts/update-moodle1.yaml
-
-   - Once moodle1 instance is Ready, refresh the URL
-
-       - You will see a message to update Moodle database for 'wiris' plugin
-
-       - Select that option to complete Plugin installation
-
-     - Navigate to -> Administration -> Plugins -> Plugins Overview
-
-     - You should see 'profilecohort' and 'wiris' plugins in the 'Additional plugins' list
+Follow https://github.com/cloud-ark/kubeplus/blob/master/examples/moodle/steps.txt
 
 
+How it works:
+--------------
 
+Moodle Operator creates Moodle instances from a base image.
+This image consists of Nginx configured with Moodle code.
+
+The Operator supports creation of multiple Moodle instances.
+Each Moodle instance is available on a separate port.
+This is made possible through combination of Operator code and a moodle setup script in the base image.
+
+Steps that are performed in the Operator code:
+- Generate a port number for each Moodle instance 
+- Inject that port as an environment variable (MOODLE_PORT) when starting Moodle container from the base image (Nginx+Moodle image).
+- Inject HOST_NAME as an environment variable into the Moodle container. The HOST_NAME is formed
+  by concatinating Ingress path created for that Moodle instance and the generated port.
+- Define a Container PostStart hook command consisting of following two steps: a) execution of moodle setup script in the base image, b) Reload Nginx in the base image.
+
+The base Nginx+Moodle base image contains a script that sets up a moodle instance. It does following actions:
+- Updates nginx's default.conf to listen on $MOODLE_PORT (value of MOODLE_PORT is available as environment variable set by the Operator). Before default.conf is updated, value of $MOODLE_PORT will have been resolved.
+- Execute Moodle install command by passing $HOST_NAME as a parameter (value of HOST_NAME is available as environment variable set by the Operator.)
+
+Once the Moodle container is running, the PostStart action configures it with correct port number and hostname, and then reloads nginx. Configuring the hostname as mentioned above ensures that resources (pages) of a Moodle instance are created with correct links. Updating Nginx config to listen to the generated port and then reloading it ensures that Nginx for that Moodle instance is be able to receive traffic on the generated port.
