@@ -306,12 +306,12 @@ func (c *Controller) syncHandler(key string) error {
 
 	fmt.Println("**************************************")
 
-	moodleName := foo.Spec.Name
-
+	moodleName := foo.Name
+	moodleNamespace := foo.Namespace
 	plugins := foo.Spec.Plugins
 
 	fmt.Printf("Moodle Name:%s\n", moodleName)
-
+	fmt.Printf("Moodle Namespace:%s\n", moodleNamespace)
 	fmt.Printf("Plugins:%v\n", plugins)
 
 	var status, url string
@@ -355,7 +355,7 @@ func (c *Controller) syncHandler(key string) error {
 			fmt.Printf("Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
 		}
 	}
-	return nil
+	return err
 }
 
 func appendList(source, destination []string) []string {

@@ -1,7 +1,8 @@
 apiVersion: moodlecontroller.kubeplus/v1
 kind: Moodle
 metadata:
-  name: moodle1
+  name: moodle2
+  namespace: customer2
 spec:
   plugins: ["profilecohort"]
 
