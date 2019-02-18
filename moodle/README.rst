@@ -16,6 +16,33 @@ Try:
 Follow https://github.com/cloud-ark/kubeplus/blob/master/examples/moodle/steps.txt
 
 
+Development:
+------------
+
+1. Modify/Update code
+2. Set Go paths (./setpaths.sh)
+3. Create Moodle Operator Docker image (./build-local-deploy-artifacts.sh)
+4. Deploy Moodle Operator
+   - kubectl create -f artifacts/deploy-moodle-operator-minikube.yaml
+5. Deploy Moodle Instance
+   - Create namespace
+     - kubectl ns customer2
+   - Create MySQL
+     - kubectl create -f artifacts/moodle2-mysql.yaml
+   - Wait for MySQL deployment to become ready
+     - kubectl get pods -n customer2
+   - Create Moodle instance
+     - kubectl create -f artifacts/moodle2.yaml
+   - Wait for Moodle instance to become ready
+     - kubectl get pods -n customer2
+6. Check Moodle
+   - kubectl describe moodles moodle2 -n customer2
+   - Follow the steps to update etcd given in
+     - https://github.com/cloud-ark/kubeplus/blob/master/examples/moodle/steps.txt#L70
+
+
+
+
 How it works:
 --------------
 
