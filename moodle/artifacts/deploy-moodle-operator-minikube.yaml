@@ -45,15 +45,8 @@ spec:
     spec:
       containers:
       - name: moodle-operator
-        image: moodle-operator:latest
+        image: moodle-operator:0.1.0
         imagePullPolicy: Never
         command: [ "/moodle"]
-        env:
-        - name: HOST_IP
-          value: MINIKUBE_IP
-        #env:
-        #- name: HOST_IP
-        #  valueFrom:
-        #    fieldRef:
-        #      fieldPath: status.hostIP
+
 
