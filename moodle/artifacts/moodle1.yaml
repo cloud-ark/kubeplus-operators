@@ -4,4 +4,5 @@ metadata:
   name: moodle1
 spec:
   plugins: ["profilecohort"]
+  mySQLServiceName: moodle1-mysql
 

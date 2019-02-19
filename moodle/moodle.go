@@ -404,7 +404,8 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 	secretName := c.createSecret(foo, adminPassword)
 
 	//MySQL Service IP and Port
-	mysqlServiceName := deploymentName + "-mysql"
+	mysqlServiceName := foo.Spec.MySQLServiceName
+	fmt.Printf("MySQL Service name:%v\n", mysqlServiceName)
 
 	mysqlServiceClient := c.kubeclientset.CoreV1().Services(namespace)
 	mysqlServiceResult, err := mysqlServiceClient.Get(mysqlServiceName, metav1.GetOptions{})

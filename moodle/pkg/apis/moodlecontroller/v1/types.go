@@ -23,6 +23,8 @@ type Moodle struct {
 type MoodleSpec struct {
 	//Comma separated list of plugin names from: https://moodle.org/plugins/
 	Plugins []string `json:"plugins"`
+	//MySQL Service name
+	MySQLServiceName string `json:"mySQLServiceName"`
 }
 
 // MoodleStatus is the status for a Moodle resource
