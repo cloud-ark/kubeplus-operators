@@ -318,6 +318,10 @@ func (c *Controller) syncHandler(key string) error {
 	var supportedPlugins, unsupportedPlugins []string
 	initialDeployment := c.isInitialDeployment(foo)
 
+	if foo.Status.Status != "" && foo.Status.Status == "Moodle Pod Timeout" {
+		return nil
+	}
+
 	if initialDeployment {
 
 		MOODLE_PORT = MOODLE_PORT_BASE
@@ -327,15 +331,16 @@ func (c *Controller) syncHandler(key string) error {
 
 		serviceURL, podName, secretName, unsupportedPlugins, erredPlugins, err := c.deployMoodle(foo)
 
+		var correctlyInstalledPlugins []string
 		if err != nil {
-			status = "Error"
+			status = err.Error()
 		} else {
 			status = "Ready"
 			url = "http://" + serviceURL
 			fmt.Printf("Moodle URL:%s\n", url)
+			correctlyInstalledPlugins = c.getDiff(plugins, erredPlugins)
 		}
 
-		correctlyInstalledPlugins := c.getDiff(plugins, erredPlugins)
 		c.updateMoodleStatus(foo, podName, secretName, status, url, &correctlyInstalledPlugins, &unsupportedPlugins)
 		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	} else {
@@ -355,7 +360,8 @@ func (c *Controller) syncHandler(key string) error {
 			fmt.Printf("Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
 		}
 	}
-	return err
+	// Returning nil so that the controller does not try to sync the same Moodle instance.
+	return nil
 }
 
 func appendList(source, destination []string) []string {
