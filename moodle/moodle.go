@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 	"math/rand"
+	"errors"
 )
 
 var (
@@ -49,7 +50,6 @@ func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, strin
 	err, moodlePodName, secretName := c.createDeployment(foo)
 
 	if err != nil {
-		panic(err)
 		return serviceURIToReturn, moodlePodName, secretName, unsupportedPlugins, erredPlugins, err
 	}
 
@@ -564,12 +564,18 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 	result, err := deploymentsClient.Create(deployment)
 	if err != nil {
 		panic(err)
+		return err, "", ""
 	}
 	fmt.Printf("Created deployment %q.\n", result.GetObjectMeta().GetName())
 
-	moodlePodName := c.waitForPod(foo)
+	moodlePodName, podReady := c.waitForPod(foo)
 
-	return nil, moodlePodName, secretName
+	if podReady {
+		return nil, moodlePodName, secretName
+	} else {
+		err1 := errors.New("Moodle Pod Timeout")
+		return err1, moodlePodName, secretName
+	}
 }
 
 func (c *Controller) createSecret(foo *operatorv1.Moodle, adminPassword string) string {
@@ -747,12 +753,14 @@ func (c *Controller) isInitialDeployment(foo *operatorv1.Moodle) bool {
 	}
 }
 
-func (c *Controller) waitForPod(foo *operatorv1.Moodle) string {
+func (c *Controller) waitForPod(foo *operatorv1.Moodle) (string, bool) {
 	var podName string
 	deploymentName := foo.Name
 	namespace := getNamespace(foo)
 	// Check if Postgres Pod is ready or not
 	podReady := false
+	podTimeoutCount := 0
+	TIMEOUT_COUNT := 150 // 10 minutes; this should be made configurable
 	for {
 		pods := c.getPods(namespace, deploymentName)
 		for _, d := range pods.Items {
@@ -783,10 +791,19 @@ func (c *Controller) waitForPod(foo *operatorv1.Moodle) string {
 		} else {
 			fmt.Println("Waiting for Moodle Pod to get ready.")
 			time.Sleep(time.Second * 4)
+			podTimeoutCount = podTimeoutCount + 1
+			if podTimeoutCount >= TIMEOUT_COUNT {
+				podReady = false
+				break
+			}
 		}
 	}
-	fmt.Println("Pod is ready.")
-	return podName
+	if podReady {
+		fmt.Println("Pod is ready.")
+	} else {
+		fmt.Println("Pod timeout")
+	}
+	return podName, podReady
 }
 
 func (c *Controller) getPods(namespace, deploymentName string) *apiv1.PodList {
