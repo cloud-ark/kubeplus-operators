@@ -407,6 +407,15 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 	mysqlServiceName := foo.Spec.MySQLServiceName
 	fmt.Printf("MySQL Service name:%v\n", mysqlServiceName)
 
+	mysqlUserName := foo.Spec.MySQLUserName
+	fmt.Printf("MySQL Username:%v\n", mysqlUserName)
+
+	mysqlUserPassword := foo.Spec.MySQLUserPassword
+	fmt.Printf("MySQL Password:%v\n", mysqlUserPassword)
+
+	moodleAdminEmail := foo.Spec.MoodleAdminEmail
+	fmt.Printf("Moodle Admin Email:%v\n", moodleAdminEmail)
+
 	mysqlServiceClient := c.kubeclientset.CoreV1().Services(namespace)
 	mysqlServiceResult, err := mysqlServiceClient.Get(mysqlServiceName, metav1.GetOptions{})
 
@@ -415,7 +424,8 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 		return err, "", secretName
 	}
 
-	mysqlHostIP := mysqlServiceResult.Spec.ClusterIP
+	//mysqlHostIP := mysqlServiceResult.Spec.ClusterIP
+	mysqlHostIP := mysqlServiceName
 	mysqlServicePortInt := mysqlServiceResult.Spec.Ports[0].Port
 	fmt.Println("MySQL Service Port int:%d\n", mysqlServicePortInt)
 	mysqlServicePort := fmt.Sprint(mysqlServicePortInt)
@@ -460,7 +470,9 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 							Lifecycle: &apiv1.Lifecycle{
 								PostStart: &apiv1.Handler{
 									Exec: &apiv1.ExecAction{
-										Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh; /usr/sbin/nginx -s reload"},
+										Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh; sleep 5; if [ ! -f /var/run/nginx.pid ]; then nohup /usr/sbin/nginx >& /dev/null; else /usr/sbin/nginx -s reload; fi"},
+										//Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh; sleep 5; /usr/sbin/nginx -s reload"},
+										//Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh"},
 									},
 								},
 							},
@@ -491,11 +503,11 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 								},
 								{
 									Name:  "MYSQL_USER",
-									Value: "user1",
+									Value: mysqlUserName,
 								},
 								{
 									Name:  "MYSQL_PASSWORD",
-									Value: "password1",
+									Value: mysqlUserPassword,
 								},
 								{
 									Name:  "MYSQL_HOST",
@@ -520,7 +532,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 								},
 								{
 									Name:  "MOODLE_ADMIN_EMAIL",
-									Value: "abc@abc.com",
+									Value: moodleAdminEmail,
 								},
 								{
 									Name:  "MOODLE_PORT",

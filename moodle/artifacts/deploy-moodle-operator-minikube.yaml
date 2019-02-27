@@ -45,7 +45,7 @@ spec:
     spec:
       containers:
       - name: moodle-operator
-        image: moodle-operator:0.1.0
+        image: moodle-operator:0.2.2
         imagePullPolicy: Never
         command: [ "/moodle"]
 
