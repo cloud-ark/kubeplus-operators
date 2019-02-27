@@ -25,6 +25,12 @@ type MoodleSpec struct {
 	Plugins []string `json:"plugins"`
 	//MySQL Service name
 	MySQLServiceName string `json:"mySQLServiceName"`
+	//MySQL Username
+	MySQLUserName string `json:"mySQLUserName"`
+	//MySQL Password
+	MySQLUserPassword string `json:"mySQLUserPassword"`
+	//Moodle Admin Email
+	MoodleAdminEmail string `json:"moodleAdminEmail"`
 }
 
 // MoodleStatus is the status for a Moodle resource
