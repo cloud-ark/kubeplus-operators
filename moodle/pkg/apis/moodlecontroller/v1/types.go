@@ -36,11 +36,11 @@ type MoodleSpec struct {
 // MoodleStatus is the status for a Moodle resource
 // +k8s:openapi-gen=true
 type MoodleStatus struct {
-    PodName string `json:"podName"`
-    SecretName string `json:"secretName"`
-	Status string `json:"status"`
-	Url string `json:"url"`
-	InstalledPlugins []string `json:"installedPlugins"`
+	PodName            string   `json:"podName"`
+	SecretName         string   `json:"secretName"`
+	Status             string   `json:"status"`
+	Url                string   `json:"url"`
+	InstalledPlugins   []string `json:"installedPlugins"`
 	UnsupportedPlugins []string `json:"unsupportedPlugins"`
 }
 

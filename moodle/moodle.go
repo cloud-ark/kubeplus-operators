@@ -2,7 +2,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"math/rand"
+	"strconv"
+	"strings"
+	"time"
+
 	operatorv1 "github.com/cloud-ark/kubeplus-operators/moodle/pkg/apis/moodlecontroller/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -12,11 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	apiutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/remotecommand"
-	"strconv"
-	"strings"
-	"time"
-	"math/rand"
-	"errors"
 )
 
 var (
@@ -200,39 +201,39 @@ func (c *Controller) executeExecCall(moodlePodName, namespace, command string) b
 }
 
 func (c *Controller) generatePassword(moodlePort int) string {
-     seed := moodlePort
-     rand.Seed(int64(seed))
-     mina := 97
-     maxa := 122
-     minA := 65
-     maxA := 90
-     min0 := 48
-     max0 := 57
-     length := 8
+	seed := moodlePort
+	rand.Seed(int64(seed))
+	mina := 97
+	maxa := 122
+	minA := 65
+	maxA := 90
+	min0 := 48
+	max0 := 57
+	length := 8
 
-     password := make([]string, length)     
- 
-     i := 0
-     for i < length {
-         charSet := rand.Intn(3)
-         if charSet == 0 {
-            passwordInt := rand.Intn(maxa - mina) + mina
-            password[i] = string(passwordInt)
-         }
-         if charSet == 1 {
-            passwordInt := rand.Intn(maxA - minA) + minA
-            password[i] = string(passwordInt)
-         }
-         if charSet == 2 {
-            passwordInt := rand.Intn(max0 - min0) + min0
-            password[i] = string(passwordInt)
-         }       
-         i++
-     }
-     passwordString := strings.Join(password,"")
-     fmt.Printf("Generated Password:%s\n", passwordString)
+	password := make([]string, length)
 
-     return passwordString
+	i := 0
+	for i < length {
+		charSet := rand.Intn(3)
+		if charSet == 0 {
+			passwordInt := rand.Intn(maxa-mina) + mina
+			password[i] = string(passwordInt)
+		}
+		if charSet == 1 {
+			passwordInt := rand.Intn(maxA-minA) + minA
+			password[i] = string(passwordInt)
+		}
+		if charSet == 2 {
+			passwordInt := rand.Intn(max0-min0) + min0
+			password[i] = string(passwordInt)
+		}
+		i++
+	}
+	passwordString := strings.Join(password, "")
+	fmt.Printf("Generated Password:%s\n", passwordString)
+
+	return passwordString
 }
 
 func getNamespace(foo *operatorv1.Moodle) string {
@@ -244,14 +245,14 @@ func getNamespace(foo *operatorv1.Moodle) string {
 }
 
 func (c *Controller) createIngress(foo *operatorv1.Moodle) {
-     
-     moodleName := foo.Name
 
-     moodlePath := "/" + moodleName
-     moodleServiceName := moodleName
-     moodlePort := MOODLE_PORT
+	moodleName := foo.Name
 
-     ingress := &extensionsv1beta1.Ingress{
+	moodlePath := "/" + moodleName
+	moodleServiceName := moodleName
+	moodlePort := MOODLE_PORT
+
+	ingress := &extensionsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: moodleName,
 			OwnerReferences: []metav1.OwnerReference{
@@ -264,35 +265,35 @@ func (c *Controller) createIngress(foo *operatorv1.Moodle) {
 			},
 		},
 		Spec: extensionsv1beta1.IngressSpec{
-		      Rules: []extensionsv1beta1.IngressRule{
-		      	     {
-				IngressRuleValue: extensionsv1beta1.IngressRuleValue{
-				    HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
-				    	  Paths: []extensionsv1beta1.HTTPIngressPath{
-					    {
-						Path: moodlePath,
-						Backend: extensionsv1beta1.IngressBackend{
-						   ServiceName: moodleServiceName,
-						   ServicePort: apiutil.FromInt(moodlePort),
+			Rules: []extensionsv1beta1.IngressRule{
+				{
+					IngressRuleValue: extensionsv1beta1.IngressRuleValue{
+						HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
+							Paths: []extensionsv1beta1.HTTPIngressPath{
+								{
+									Path: moodlePath,
+									Backend: extensionsv1beta1.IngressBackend{
+										ServiceName: moodleServiceName,
+										ServicePort: apiutil.FromInt(moodlePort),
+									},
+								},
+							},
 						},
-					    },
-					  },
-				    },
+					},
 				},
-			     },
-		      },
+			},
 		},
-     }
+	}
 
-     namespace := getNamespace(foo)
-     ingressesClient := c.kubeclientset.ExtensionsV1beta1().Ingresses(namespace)
+	namespace := getNamespace(foo)
+	ingressesClient := c.kubeclientset.ExtensionsV1beta1().Ingresses(namespace)
 
-     fmt.Println("Creating Ingress...")
-     result, err := ingressesClient.Create(ingress)
-     if err != nil {
-	panic(err)
-     }
-     fmt.Printf("Created Ingress %q.\n", result.GetObjectMeta().GetName())
+	fmt.Println("Creating Ingress...")
+	result, err := ingressesClient.Create(ingress)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Created Ingress %q.\n", result.GetObjectMeta().GetName())
 }
 
 func (c *Controller) createPersistentVolume(foo *operatorv1.Moodle) {
@@ -410,8 +411,23 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 	mysqlUserName := foo.Spec.MySQLUserName
 	fmt.Printf("MySQL Username:%v\n", mysqlUserName)
 
-	mysqlUserPassword := foo.Spec.MySQLUserPassword
-	fmt.Printf("MySQL Password:%v\n", mysqlUserPassword)
+	passwordLocation := foo.Spec.MySQLUserPassword
+	secretPasswordSplitted := strings.Split(passwordLocation, ".")
+	mysqlSecretName := secretPasswordSplitted[0]
+	mysqlPasswordField := secretPasswordSplitted[1]
+
+	secretsClient := c.kubeclientset.CoreV1().Secrets(namespace)
+	secret, err := secretsClient.Get(mysqlSecretName, metav1.GetOptions{})
+
+	if err != nil {
+		fmt.Printf("Error, secret %s, not found from in namespace %s: %v\n", mysqlSecretName, namespace, err)
+	}
+	if _, ok := secret.Data[mysqlPasswordField]; !ok {
+		fmt.Printf("Error, secret  %s, does not have %s field.\n", mysqlSecretName, mysqlPasswordField)
+	}
+	mysqlUserPassword := string(secret.Data[mysqlPasswordField])
+
+	fmt.Printf("MySQL Password:%s\n", mysqlUserPassword)
 
 	moodleAdminEmail := foo.Spec.MoodleAdminEmail
 	fmt.Printf("Moodle Admin Email:%v\n", moodleAdminEmail)
@@ -539,7 +555,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 									Value: strconv.Itoa(moodlePort),
 								},
 								{
-									Name: "HOST_NAME",
+									Name:  "HOST_NAME",
 									Value: HOST_NAME,
 									/*ValueFrom: &apiv1.EnvVarSource{
 									  FieldRef: &apiv1.ObjectFieldSelector{
@@ -592,45 +608,45 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 
 func (c *Controller) createSecret(foo *operatorv1.Moodle, adminPassword string) string {
 
-        fmt.Println("Inside createSecret")
-        secretName := foo.Name
+	fmt.Println("Inside createSecret")
+	secretName := foo.Name
 
 	fmt.Printf("Secret Name:%s\n", secretName)
 	fmt.Printf("Admin Password:%s\n", adminPassword)
-	
-        secret := &apiv1.Secret{
-                ObjectMeta: metav1.ObjectMeta{
-                        Name: secretName,
-                        OwnerReferences: []metav1.OwnerReference{
-                                {
-                                        APIVersion: API_VERSION,
-                                        Kind:       MOODLE_KIND,
-                                        Name:       foo.Name,
-                                        UID:        foo.UID,
-                                },
-                        },
-                        Labels: map[string]string{
-                                "secret": secretName,
-                        },
-                },
-                Data: map[string][]byte {
-		      "adminPassword": []byte(adminPassword),
+
+	secret := &apiv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: secretName,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: API_VERSION,
+					Kind:       MOODLE_KIND,
+					Name:       foo.Name,
+					UID:        foo.UID,
+				},
+			},
+			Labels: map[string]string{
+				"secret": secretName,
+			},
 		},
-        }
-
-        namespace := getNamespace(foo)
-        secretsClient := c.kubeclientset.CoreV1().Secrets(namespace)
-
-        fmt.Println("Creating secrets..")
-	result, err := secretsClient.Create(secret)
-        if err != nil {
-	   panic(err)
+		Data: map[string][]byte{
+			"adminPassword": []byte(adminPassword),
+		},
 	}
-        fmt.Printf("Created Secret %q.\n", result.GetObjectMeta().GetName())
+
+	namespace := getNamespace(foo)
+	secretsClient := c.kubeclientset.CoreV1().Secrets(namespace)
+
+	fmt.Println("Creating secrets..")
+	result, err := secretsClient.Create(secret)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Created Secret %q.\n", result.GetObjectMeta().GetName())
 	return secretName
 }
 
-func (c *Controller) createService(foo *operatorv1.Moodle) (string) {
+func (c *Controller) createService(foo *operatorv1.Moodle) string {
 
 	fmt.Println("Inside createService")
 	deploymentName := foo.Name
