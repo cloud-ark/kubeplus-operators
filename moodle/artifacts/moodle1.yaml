@@ -6,5 +6,5 @@ spec:
   plugins: ["profilecohort"]
   mySQLServiceName: my-cluster-mysql-master
   mySQLUserName: root
-  mySQLUserPassword: mypass
+  mySQLUserPassword: cluster1-secret.ROOT_PASSWORD
   moodleAdminEmail: test@test.com
