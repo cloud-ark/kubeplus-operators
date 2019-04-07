@@ -19,7 +19,9 @@ metadata:
   name: moodles.moodlecontroller.kubeplus
   annotations:
     composition: Deployment, Service, PersistentVolume, PersistentVolumeClaim, Secret, Ingress
-    constants: Moodle.Deployment.Pod.VolumeMounts.MountPath: /opt/moodledata
+    implementation_choices: moodle-operator-implementation-details.implementation_choices
+    usage: moodle-operator-usage.usage
+    openapispec: moodle-openapispec.openapispec
 spec:
   group: moodlecontroller.kubeplus
   version: v1
