@@ -1,0 +1,120 @@
+kind: ConfigMap 
+apiVersion: v1 
+metadata:
+  name: moodle-operator-implementation-details
+data:
+  implementation_choices: |
+    Moodle Operator uses following values in its code. These cannot be changed.
+    - Moodle.Deployment.Pod.VolumeMounts.MountPath=/opt/moodledata
+    - Moodle.PersistentVolume.StorageClass=manual
+    - Moodle.PersistentVolume.Capacity=1Gi
+---
+kind: ConfigMap 
+apiVersion: v1 
+metadata:
+  name: moodle-operator-usage
+data:
+  usage: |
+    In order to use Moodle Custom Resource you need to first create a MySQL Instance. You can either
+    use MySQL Operator to create an instance or use a regular MySQL Deployment.
+
+    Moodle Operator supports namespaces. When creating a Moodle Custom Resource you can specify the
+    namespace in metadata.namespace attribute. If namespace attribute is not specified, default namespace
+    is assumed. Check the implementation details section to know about some of the implementation choices
+    and decisions that have been made by the Moodle Operator.
+---
+kind: ConfigMap 
+apiVersion: v1 
+metadata:
+  name: moodle-openapispec
+data:
+  openapispec: |
+    {
+    "swagger": "2.0",
+    "info": {
+     "title": "OpenAPI Doc Generator",
+     "version": "0.0.1"
+    },
+    "paths": {},
+    "definitions": {
+     "typedir.Moodle": {
+      "description": "Moodle is a specification for a Moodle resource",
+      "required": [
+       "spec",
+       "status"
+      ],
+      "properties": {
+       "apiVersion": {
+        "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+        "type": "string"
+       },
+       "kind": {
+        "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+        "type": "string"
+       },
+       "spec": {
+        "$ref": "#/definitions/typedir.MoodleSpec"
+       },
+       "status": {
+        "$ref": "#/definitions/typedir.MoodleStatus"
+       }
+      }
+     },
+     "typedir.MoodleSpec": {
+      "description": "MoodleSpec is the spec for a MoodleSpec resource",
+      "required": [
+       "name",
+       "plugins"
+      ],
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "plugins": {
+        "description": "Comma separated list of plugin names from: https://moodle.org/plugins/",
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "typedir.MoodleStatus": {
+      "description": "MoodleStatus is the status for a Moodle resource",
+      "required": [
+       "podName",
+       "secretName",
+       "status",
+       "url",
+       "installedPlugins",
+       "unsupportedPlugins"
+      ],
+      "properties": {
+       "installedPlugins": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "podName": {
+        "type": "string"
+       },
+       "secretName": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string"
+       },
+       "unsupportedPlugins": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "url": {
+        "type": "string"
+       }
+      }
+     }
+    }
+    }
