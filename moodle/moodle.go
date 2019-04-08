@@ -42,8 +42,10 @@ func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, strin
 	var supportedPlugins, unsupportedPlugins, erredPlugins []string
 
 	c.createPersistentVolume(foo)
-	c.createPersistentVolumeClaim(foo)
 
+	if foo.Spec.PVCVolumeName == "" {
+		c.createPersistentVolumeClaim(foo)
+	}
 	servicePort := c.createService(foo)
 
 	c.createIngress(foo)
@@ -400,6 +402,10 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 	//image := "lmecld/nginxformoodle6:latest"
 	volumeName := "moodle-data"
 
+	claimName := foo.Spec.PVCVolumeName
+	if claimName == "" {
+		claimName = foo.Name
+	}
 	adminPassword := c.generatePassword(MOODLE_PORT)
 
 	secretName := c.createSecret(foo, adminPassword)
@@ -577,7 +583,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 							Name: volumeName,
 							VolumeSource: apiv1.VolumeSource{
 								PersistentVolumeClaim: &apiv1.PersistentVolumeClaimVolumeSource{
-									ClaimName: deploymentName,
+									ClaimName: claimName,
 								},
 							},
 						},

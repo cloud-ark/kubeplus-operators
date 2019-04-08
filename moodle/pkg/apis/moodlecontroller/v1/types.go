@@ -31,6 +31,8 @@ type MoodleSpec struct {
 	MySQLUserPassword string `json:"mySQLUserPassword"`
 	//Moodle Admin Email
 	MoodleAdminEmail string `json:"moodleAdminEmail"`
+	//PVC Volume Name
+	PVCVolumeName string `json:"PVCVolumeName"`
 }
 
 // MoodleStatus is the status for a Moodle resource
