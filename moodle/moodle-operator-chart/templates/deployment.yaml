@@ -18,7 +18,10 @@ kind: CustomResourceDefinition
 metadata:
   name: moodles.moodlecontroller.kubeplus
   annotations:
-    composition: Deployment, Service, PersistentVolume, PersistentVolumeClaim, Secret, Ingress
+    platform-as-code/composition: Deployment, Service, PersistentVolume, PersistentVolumeClaim, Secret, Ingress
+    platform-as-code/constants: moodle-operator-implementation-details.implementation_choices
+    platform-as-code/usage: moodle-operator-usage.usage
+    platform-as-code/openapispec: moodle-openapispec.openapispec
 spec:
   group: moodlecontroller.kubeplus
   version: v1
@@ -45,7 +48,7 @@ spec:
     spec:
       containers:
       - name: moodle-operator
-        image: lmecld/moodle-operator:0.2.2
+        image: lmecld/moodle-operator:0.2.4
         imagePullPolicy: IfNotPresent
         command: [ "/moodle"]
         env:
