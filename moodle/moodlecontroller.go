@@ -10,6 +10,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	operatorv1 "github.com/cloud-ark/kubeplus-operators/moodle/pkg/apis/moodlecontroller/v1"
+	clientset "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/clientset/versioned"
+	operatorscheme "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/clientset/versioned/scheme"
+	informers "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/informers/externalversions"
+	listers "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/listers/moodlecontroller/v1"
+	"github.com/cloud-ark/kubeplus-operators/moodle/pkg/utils"
+
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -22,12 +29,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
-
-	operatorv1 "github.com/cloud-ark/kubeplus-operators/moodle/pkg/apis/moodlecontroller/v1"
-	clientset "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/clientset/versioned"
-	operatorscheme "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/clientset/versioned/scheme"
-	informers "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/informers/externalversions"
-	listers "github.com/cloud-ark/kubeplus-operators/moodle/pkg/client/listers/moodlecontroller/v1"
 )
 
 const controllerAgentName = "moodle-controller"
@@ -56,7 +57,7 @@ func init() {
 }
 
 // Controller is the controller implementation for Foo resources
-type Controller struct {
+type MoodleController struct {
 	cfg *restclient.Config
 	// kubeclientset is a standard kubernetes clientset
 	kubeclientset kubernetes.Interface
@@ -67,7 +68,6 @@ type Controller struct {
 	deploymentsSynced cache.InformerSynced
 	moodleLister      listers.MoodleLister
 	foosSynced        cache.InformerSynced
-
 	// workqueue is a rate limited work queue. This is used to queue work to be
 	// processed instead of performing it as soon as a change happens. This
 	// means we can ensure we only process a fixed amount of resources at a
@@ -77,15 +77,16 @@ type Controller struct {
 	// recorder is an event recorder for recording Event resources to the
 	// Kubernetes API.
 	recorder record.EventRecorder
+	util     utils.Utils
 }
 
 // NewController returns a new sample controller
-func NewController(
+func NewMoodleController(
 	cfg *restclient.Config,
 	kubeclientset kubernetes.Interface,
 	sampleclientset clientset.Interface,
 	kubeInformerFactory kubeinformers.SharedInformerFactory,
-	moodleInformerFactory informers.SharedInformerFactory) *Controller {
+	moodleInformerFactory informers.SharedInformerFactory) *MoodleController {
 
 	// obtain references to shared index informers for the Deployment and Foo
 	// types.
@@ -101,8 +102,9 @@ func NewController(
 	eventBroadcaster.StartLogging(glog.Infof)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
+	utils := utils.NewUtils(cfg, kubeclientset)
 
-	controller := &Controller{
+	controller := &MoodleController{
 		cfg:               cfg,
 		kubeclientset:     kubeclientset,
 		sampleclientset:   sampleclientset,
@@ -112,6 +114,7 @@ func NewController(
 		foosSynced:        moodleInformer.Informer().HasSynced,
 		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Moodles"),
 		recorder:          recorder,
+		util:              utils,
 	}
 
 	glog.Info("Setting up event handlers")
@@ -121,8 +124,8 @@ func NewController(
 		UpdateFunc: func(old, new interface{}) {
 			newDepl := new.(*operatorv1.Moodle)
 			oldDepl := old.(*operatorv1.Moodle)
-			//fmt.Println("New Version:%s", newDepl.ResourceVersion)
-			//fmt.Println("Old Version:%s", oldDepl.ResourceVersion)
+			//fmt.Println("MoodleController.go  : New Version:%s", newDepl.ResourceVersion)
+			//fmt.Println("MoodleController.go  : Old Version:%s", oldDepl.ResourceVersion)
 			if newDepl.ResourceVersion == oldDepl.ResourceVersion {
 				// Periodic resync will send update events for all known Deployments.
 				// Two different versions of the same Deployment will always have different RVs.
@@ -139,7 +142,7 @@ func NewController(
 // as syncing informer caches and starting workers. It will block until stopCh
 // is closed, at which point it will shutdown the workqueue and wait for
 // workers to finish processing their current work items.
-func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
+func (c *MoodleController) Run(threadiness int, stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 	defer c.workqueue.ShutDown()
 
@@ -153,7 +156,7 @@ func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
 	}
 
 	glog.Info("Starting workers")
-	// Launch two workers to process Foo resources
+	// Launch two workers to process Pod resources
 	for i := 0; i < threadiness; i++ {
 		go wait.Until(c.runWorker, time.Second, stopCh)
 	}
@@ -168,70 +171,15 @@ func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
 // runWorker is a long-running function that will continually call the
 // processNextWorkItem function in order to read and process a message on the
 // workqueue.
-func (c *Controller) runWorker() {
+func (c *MoodleController) runWorker() {
 	for c.processNextWorkItem() {
 	}
-}
-
-// processNextWorkItem will read a single work item off the workqueue and
-// attempt to process it, by calling the syncHandler.
-func (c *Controller) processNextWorkItem() bool {
-	obj, shutdown := c.workqueue.Get()
-
-	if shutdown {
-		return false
-	}
-
-	// We wrap this block in a func so we can defer c.workqueue.Done.
-	err := func(obj interface{}) error {
-		// We call Done here so the workqueue knows we have finished
-		// processing this item. We also must remember to call Forget if we
-		// do not want this work item being re-queued. For example, we do
-		// not call Forget if a transient error occurs, instead the item is
-		// put back on the workqueue and attempted again after a back-off
-		// period.
-		defer c.workqueue.Done(obj)
-		var key string
-		var ok bool
-		// We expect strings to come off the workqueue. These are of the
-		// form namespace/name. We do this as the delayed nature of the
-		// workqueue means the items in the informer cache may actually be
-		// more up to date that when the item was initially put onto the
-		// workqueue.
-		if key, ok = obj.(string); !ok {
-			// As the item in the workqueue is actually invalid, we call
-			// Forget here else we'd go into a loop of attempting to
-			// process a work item that is invalid.
-			c.workqueue.Forget(obj)
-			runtime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
-			return nil
-		}
-		// Run the syncHandler, passing it the namespace/name string of the
-		// Foo resource to be synced.
-		if err := c.syncHandler(key); err != nil {
-			return fmt.Errorf("error syncing '%s': %s", key, err.Error())
-		}
-		// Finally, if no error occurs we Forget this item so it does not
-		// get queued again until another change happens.
-		//fmt.Println("processNextItem before forgetting")
-		c.workqueue.Forget(obj)
-		//fmt.Println("processNextItem after forgetting")
-		glog.Infof("Successfully synced '%s'", key)
-		return nil
-	}(obj)
-
-	if err != nil {
-		runtime.HandleError(err)
-		return true
-	}
-
-	return true
 }
 
 // enqueueFoo takes a Foo resource and converts it into a namespace/name
 // string which is then put onto the work queue. This method should *not* be
 // passed resources of any type other than Foo.
-func (c *Controller) enqueueFoo(obj interface{}) {
+func (c *MoodleController) enqueueFoo(obj interface{}) {
 	var key string
 	var err error
 	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
@@ -246,7 +194,7 @@ func (c *Controller) enqueueFoo(obj interface{}) {
 // objects metadata.ownerReferences field for an appropriate OwnerReference.
 // It then enqueues that Foo resource to be processed. If the object does not
 // have an appropriate OwnerReference, it will simply be skipped.
-func (c *Controller) handleObject(obj interface{}) {
+func (c *MoodleController) handleObject(obj interface{}) {
 	var object metav1.Object
 	var ok bool
 	if object, ok = obj.(metav1.Object); !ok {
@@ -281,10 +229,63 @@ func (c *Controller) handleObject(obj interface{}) {
 	}
 }
 
+// processNextWorkItem will read a single work item off the workqueue and
+// attempt to process it, by calling the syncHandler.
+func (c *MoodleController) processNextWorkItem() bool {
+	obj, shutdown := c.workqueue.Get()
+
+	if shutdown {
+		return false
+	}
+	// We wrap this block in a func so we can defer c.workqueue.Done.
+	err := func(obj interface{}) error {
+		// We call Done here so the workqueue knows we have finished
+		// processing this item. We also must remember to call Forget if we
+		// do not want this work item being re-queued. For example, we do
+		// not call Forget if a transient error occurs, instead the item is
+		// put back on the workqueue and attempted again after a back-off
+		// period.
+		defer c.workqueue.Done(obj)
+		var key string
+		var ok bool
+		// We expect strings to come off the workqueue. These are of the
+		// form namespace/name. We do this as the delayed nature of the
+		// workqueue means the items in the informer cache may actually be
+		// more up to date that when the item was initially put onto the
+		// workqueue.
+		if key, ok = obj.(string); !ok {
+			// As the item in the workqueue is actually invalid, we call
+			// Forget here else we'd go into a loop of attempting to
+			// process a work item that is invalid.
+			c.workqueue.Forget(obj)
+			runtime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
+			return nil
+		}
+		// Run the syncHandler, passing it the namespace/name string of the
+		// Foo resource to be synced.
+		if err := c.syncHandler(key); err != nil {
+			return fmt.Errorf("error syncing '%s': %s", key, err.Error())
+		}
+		// Finally, if no error occurs we Forget this item so it does not
+		// get queued again until another change happens.
+		//fmt.Println("MoodleController.go  : processNextItem before forgetting")
+		c.workqueue.Forget(obj)
+		//fmt.Println("MoodleController.go  : processNextItem after forgetting")
+		glog.Infof("Successfully synced '%s'", key)
+		return nil
+	}(obj)
+	if err != nil {
+		runtime.HandleError(err)
+		return true
+	}
+
+	return true
+}
+
 // syncHandler compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the Foo resource
 // with the current status of the resource.
-func (c *Controller) syncHandler(key string) error {
+func (c *MoodleController) syncHandler(key string) error {
 	// Convert the namespace/name string into a distinct namespace and name
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
@@ -304,15 +305,15 @@ func (c *Controller) syncHandler(key string) error {
 		return err
 	}
 
-	fmt.Println("**************************************")
+	fmt.Println("MoodleController.go  : **************************************")
 
 	moodleName := foo.Name
 	moodleNamespace := foo.Namespace
 	plugins := foo.Spec.Plugins
 
-	fmt.Printf("Moodle Name:%s\n", moodleName)
-	fmt.Printf("Moodle Namespace:%s\n", moodleNamespace)
-	fmt.Printf("Plugins:%v\n", plugins)
+	fmt.Printf("MoodleController.go  : Moodle Name:%s\n", moodleName)
+	fmt.Printf("MoodleController.go  : Moodle Namespace:%s\n", moodleNamespace)
+	fmt.Printf("MoodleController.go  : Plugins:%v\n", plugins)
 
 	var status, url string
 	var supportedPlugins, unsupportedPlugins []string
@@ -337,7 +338,7 @@ func (c *Controller) syncHandler(key string) error {
 		} else {
 			status = "Ready"
 			url = "http://" + serviceURL
-			fmt.Printf("Moodle URL:%s\n", url)
+			fmt.Printf("MoodleController.go  : Moodle URL:%s\n", url)
 			correctlyInstalledPlugins = c.getDiff(plugins, erredPlugins)
 		}
 
@@ -357,7 +358,7 @@ func (c *Controller) syncHandler(key string) error {
 			c.updateMoodleStatus(foo, podName, "", status, url, &supportedPlugins, &unsupportedPlugins)
 			c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 		} else {
-			fmt.Printf("Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
+			fmt.Printf("MoodleController.go  : Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
 		}
 	}
 	// Returning nil so that the controller does not try to sync the same Moodle instance.
@@ -382,7 +383,7 @@ func appendList(source, destination []string) []string {
 	return appendedList
 }
 
-func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, secretName, status string,
+func (c *MoodleController) updateMoodleStatus(foo *operatorv1.Moodle, podName, secretName, status string,
 	url string, plugins *[]string, unsupportedPlugins *[]string) error {
 	// NEVER modify objects from the store. It's a read-only, local cache.
 	// You can use DeepCopy() to make a deep copy of original object and modify this copy
@@ -391,7 +392,7 @@ func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, secretN
 
 	fooCopy.Status.PodName = podName
 	if secretName != "" {
-	   fooCopy.Status.SecretName = secretName
+		fooCopy.Status.SecretName = secretName
 	}
 	fooCopy.Status.Status = status
 	fooCopy.Status.Url = url
@@ -403,7 +404,7 @@ func (c *Controller) updateMoodleStatus(foo *operatorv1.Moodle, podName, secretN
 	// nothing other than resource status has been updated.
 	_, err := c.sampleclientset.MoodlecontrollerV1().Moodles(foo.Namespace).Update(fooCopy)
 	if err != nil {
-		fmt.Println("ERROR in UpdateFooStatus %v", err)
+		fmt.Printf("MoodleController.go  : ERROR in UpdateFooStatus %e", err)
 	}
 	return err
 }

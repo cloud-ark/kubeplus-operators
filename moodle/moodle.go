@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -10,34 +9,17 @@ import (
 	"time"
 
 	operatorv1 "github.com/cloud-ark/kubeplus-operators/moodle/pkg/apis/moodlecontroller/v1"
+	"github.com/cloud-ark/kubeplus-operators/moodle/pkg/utils/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	apiutil "k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/tools/remotecommand"
 )
 
-var (
-	API_VERSION    = "moodlecontroller.kubeplus/v1"
-	MOODLE_KIND    = "Moodle"
-	CONTAINER_NAME = "moodle"
-	PLUGIN_MAP     = map[string]map[string]string{
-		"profilecohort": {
-			"downloadLink":  "https://moodle.org/plugins/download.php/17929/local_profilecohort_moodle35_2018092800.zip",
-			"installFolder": "/var/www/html/local/",
-		},
-		"wiris": {
-			"downloadLink":  "https://moodle.org/plugins/download.php/18916/filter_wiris_moodle36_2019020700.zip",
-			"installFolder": "/var/www/html/filter/",
-		},
-	}
-)
-
-func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, string, []string, []string, error) {
-	fmt.Println("Inside deployMoodle")
+func (c *MoodleController) deployMoodle(foo *operatorv1.Moodle) (string, string, string, []string, []string, error) {
+	fmt.Println("MoodleController.go  : Inside deployMoodle")
 	var moodlePodName, serviceURIToReturn string
 	var supportedPlugins, unsupportedPlugins, erredPlugins []string
 
@@ -65,144 +47,32 @@ func (c *Controller) deployMoodle(foo *operatorv1.Moodle) (string, string, strin
 
 	if len(supportedPlugins) > 0 {
 		namespace := getNamespace(foo)
-		erredPlugins = c.installPlugins(supportedPlugins, moodlePodName, namespace)
+		fmt.Println("!!!!" + moodlePodName)
+		erredPlugins = c.util.EnsurePluginsInstalled(foo, moodlePodName, namespace, constants.PLUGIN_MAP)
 	}
 
 	serviceURIToReturn = foo.Name + ":" + servicePort
-	fmt.Println("Returning from deployMoodle")
+	fmt.Println("MoodleController.go  : MoodleController.go: Returning from deployMoodle")
 
 	return serviceURIToReturn, moodlePodName, secretName, unsupportedPlugins, erredPlugins, nil
 }
 
-func (c *Controller) getSupportedPlugins(plugins []string) ([]string, []string) {
+func (c *MoodleController) getSupportedPlugins(plugins []string) ([]string, []string) {
 
 	var supportedPlugins, unsupportedPlugins []string
 
 	for _, p := range plugins {
-		if _, ok := PLUGIN_MAP[p]; ok {
+		if _, ok := constants.PLUGIN_MAP[p]; ok {
 			supportedPlugins = append(supportedPlugins, p)
 		} else {
 			unsupportedPlugins = append(unsupportedPlugins, p)
 		}
 	}
-	fmt.Println("Supported Plugins:%v", supportedPlugins)
-	fmt.Println("Unsupported Plugins:%v", unsupportedPlugins)
+	fmt.Printf("MoodleController.go  : Supported Plugins: %v\n", supportedPlugins)
 	return supportedPlugins, unsupportedPlugins
 }
 
-func (c *Controller) installPlugins(plugins []string, moodlePodName, namespace string) []string {
-	fmt.Println("Inside installPlugins")
-	erredPlugins := make([]string, 0)
-	for _, pluginName := range plugins {
-		fmt.Printf("Installing plugin %s\n", pluginName)
-		pluginInstallDetails := PLUGIN_MAP[pluginName]
-
-		downloadLink := pluginInstallDetails["downloadLink"]
-		installFolder := pluginInstallDetails["installFolder"]
-		fmt.Printf("Download Link:%s\n", downloadLink)
-		fmt.Printf("Install Folder:%s\n", installFolder)
-		success := c.exec(pluginName, moodlePodName, namespace, downloadLink, installFolder)
-		if !success {
-			erredPlugins = append(erredPlugins, pluginName)
-		}
-	}
-	fmt.Printf("Erred Plugins:%v\n", erredPlugins)
-	fmt.Println("Done installing Plugins")
-	return erredPlugins
-}
-
-func (c *Controller) exec(pluginName, moodlePodName, namespace, downloadLink, installFolder string) bool {
-
-	fmt.Println("Inside exec")
-
-	_, err := c.kubeclientset.CoreV1().Pods(namespace).Get(moodlePodName, metav1.GetOptions{})
-
-	if err != nil {
-		fmt.Errorf("could not get pod info: %v", err)
-		panic(err)
-	}
-
-	indexOfLastSlash := strings.LastIndex(downloadLink, "/")
-	pluginZipFileName := downloadLink[indexOfLastSlash+1:]
-	fmt.Printf("Plugin ZipFile Name:%s\n", pluginZipFileName)
-
-	downloadPluginCmd := "wget " + downloadLink + " -O /tmp/" + pluginZipFileName
-	fmt.Printf("Download Plugin Cmd:%s\n", downloadPluginCmd)
-	c.executeExecCall(moodlePodName, namespace, downloadPluginCmd)
-
-	unzipPluginCmd := "unzip /tmp/" + pluginZipFileName + " -d " + "/tmp/."
-	fmt.Printf("Unzip Plugin Cmd:%s\n", unzipPluginCmd)
-	c.executeExecCall(moodlePodName, namespace, unzipPluginCmd)
-
-	mvPluginCmd := "mv /tmp/" + pluginName + " " + installFolder + "/."
-	fmt.Printf("Move Plugin Cmd:%s\n", mvPluginCmd)
-	success := c.executeExecCall(moodlePodName, namespace, mvPluginCmd)
-
-	if success {
-		fmt.Printf("Done installing plugin %s\n", pluginName)
-	} else {
-		fmt.Printf("Encountered error in installing plugin\n")
-	}
-	return success
-}
-
-/*
-  Reference for kubectl exec:
-  - https://github.com/a4abhishek/Client-Go-Examples/blob/master/exec_to_pod/exec_to_pod.go
-  - https://stackoverflow.com/questions/43314689/example-of-exec-in-k8ss-pod-by-using-go-client/43315545#43315545
-  - https://github.com/kubernetes/client-go/issues/204
-*/
-func (c *Controller) executeExecCall(moodlePodName, namespace, command string) bool {
-	var success = true
-	fmt.Println("Inside executeExecCall")
-	req := c.kubeclientset.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(moodlePodName).
-		Namespace(namespace).
-		SubResource("exec")
-
-	scheme := runtime.NewScheme()
-	if err := apiv1.AddToScheme(scheme); err != nil {
-		success = false
-	}
-
-	parameterCodec := runtime.NewParameterCodec(scheme)
-	req.VersionedParams(&apiv1.PodExecOptions{
-		Command:   strings.Fields(command),
-		Container: CONTAINER_NAME,
-		//Stdin:     stdin != nil,
-		Stdout: true,
-		Stderr: true,
-		TTY:    false,
-	}, parameterCodec)
-
-	exec, err := remotecommand.NewSPDYExecutor(c.cfg, "POST", req.URL())
-	if err != nil {
-		success = false
-	}
-
-	var (
-		execOut bytes.Buffer
-		execErr bytes.Buffer
-	)
-
-	err = exec.Stream(remotecommand.StreamOptions{
-		Stdin:  nil,
-		Stdout: &execOut,
-		Stderr: &execErr,
-		Tty:    false,
-	})
-
-	if err != nil {
-		success = false
-	}
-
-	responseString := execOut.String()
-	fmt.Printf("Output:%v\n", responseString)
-	return success
-}
-
-func (c *Controller) generatePassword(moodlePort int) string {
+func (c *MoodleController) generatePassword(moodlePort int) string {
 	seed := moodlePort
 	rand.Seed(int64(seed))
 	mina := 97
@@ -233,7 +103,7 @@ func (c *Controller) generatePassword(moodlePort int) string {
 		i++
 	}
 	passwordString := strings.Join(password, "")
-	fmt.Printf("Generated Password:%s\n", passwordString)
+	fmt.Printf("MoodleController.go  : MoodleController.go  : Generated Password:%s\n", passwordString)
 
 	return passwordString
 }
@@ -246,7 +116,7 @@ func getNamespace(foo *operatorv1.Moodle) string {
 	return namespace
 }
 
-func (c *Controller) createIngress(foo *operatorv1.Moodle) {
+func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 
 	moodleName := foo.Name
 
@@ -259,8 +129,8 @@ func (c *Controller) createIngress(foo *operatorv1.Moodle) {
 			Name: moodleName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: API_VERSION,
-					Kind:       MOODLE_KIND,
+					APIVersion: constants.API_VERSION,
+					Kind:       constants.MOODLE_KIND,
 					Name:       foo.Name,
 					UID:        foo.UID,
 				},
@@ -290,16 +160,16 @@ func (c *Controller) createIngress(foo *operatorv1.Moodle) {
 	namespace := getNamespace(foo)
 	ingressesClient := c.kubeclientset.ExtensionsV1beta1().Ingresses(namespace)
 
-	fmt.Println("Creating Ingress...")
+	fmt.Println("MoodleController.go  : Creating Ingress...")
 	result, err := ingressesClient.Create(ingress)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Created Ingress %q.\n", result.GetObjectMeta().GetName())
+	fmt.Printf("MoodleController.go  : Created Ingress %q.\n", result.GetObjectMeta().GetName())
 }
 
-func (c *Controller) createPersistentVolume(foo *operatorv1.Moodle) {
-	fmt.Println("Inside createPersistentVolume")
+func (c *MoodleController) createPersistentVolume(foo *operatorv1.Moodle) {
+	fmt.Println("MoodleController.go  : Inside createPersistentVolume")
 
 	deploymentName := foo.Name
 	persistentVolume := &apiv1.PersistentVolume{
@@ -307,8 +177,8 @@ func (c *Controller) createPersistentVolume(foo *operatorv1.Moodle) {
 			Name: deploymentName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: API_VERSION,
-					Kind:       MOODLE_KIND,
+					APIVersion: constants.API_VERSION,
+					Kind:       constants.MOODLE_KIND,
 					Name:       foo.Name,
 					UID:        foo.UID,
 				},
@@ -336,16 +206,16 @@ func (c *Controller) createPersistentVolume(foo *operatorv1.Moodle) {
 
 	persistentVolumeClient := c.kubeclientset.CoreV1().PersistentVolumes()
 
-	fmt.Println("Creating persistentVolume...")
+	fmt.Println("MoodleController.go  : Creating persistentVolume...")
 	result, err := persistentVolumeClient.Create(persistentVolume)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Created persistentVolume %q.\n", result.GetObjectMeta().GetName())
+	fmt.Printf("MoodleController.go  : Created persistentVolume %q.\n", result.GetObjectMeta().GetName())
 }
 
-func (c *Controller) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
-	fmt.Println("Inside createPersistentVolumeClaim")
+func (c *MoodleController) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
+	fmt.Println("MoodleController.go  : Inside createPersistentVolumeClaim")
 
 	deploymentName := foo.Name
 	persistentVolumeClaim := &apiv1.PersistentVolumeClaim{
@@ -353,8 +223,8 @@ func (c *Controller) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
 			Name: deploymentName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: API_VERSION,
-					Kind:       MOODLE_KIND,
+					APIVersion: constants.API_VERSION,
+					Kind:       constants.MOODLE_KIND,
 					Name:       foo.Name,
 					UID:        foo.UID,
 				},
@@ -380,17 +250,17 @@ func (c *Controller) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
 	namespace := getNamespace(foo)
 	persistentVolumeClaimClient := c.kubeclientset.CoreV1().PersistentVolumeClaims(namespace)
 
-	fmt.Println("Creating persistentVolumeClaim...")
+	fmt.Println("MoodleController.go  : Creating persistentVolumeClaim...")
 	result, err := persistentVolumeClaimClient.Create(persistentVolumeClaim)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Created persistentVolumeClaim %q.\n", result.GetObjectMeta().GetName())
+	fmt.Printf("MoodleController.go  : Created persistentVolumeClaim %q.\n", result.GetObjectMeta().GetName())
 }
 
-func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, string) {
+func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, string, string) {
 
-	fmt.Println("Inside createDeployment")
+	fmt.Println("MoodleController.go  : Inside createDeployment")
 
 	namespace := getNamespace(foo)
 	deploymentsClient := c.kubeclientset.AppsV1().Deployments(namespace)
@@ -412,10 +282,10 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 
 	//MySQL Service IP and Port
 	mysqlServiceName := foo.Spec.MySQLServiceName
-	fmt.Printf("MySQL Service name:%v\n", mysqlServiceName)
+	fmt.Printf("MoodleController.go  : MySQL Service name:%v\n", mysqlServiceName)
 
 	mysqlUserName := foo.Spec.MySQLUserName
-	fmt.Printf("MySQL Username:%v\n", mysqlUserName)
+	fmt.Printf("MoodleController.go  : MySQL Username:%v\n", mysqlUserName)
 
 	passwordLocation := foo.Spec.MySQLUserPassword
 	secretPasswordSplitted := strings.Split(passwordLocation, ".")
@@ -426,46 +296,46 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 	secret, err := secretsClient.Get(mysqlSecretName, metav1.GetOptions{})
 
 	if err != nil {
-		fmt.Printf("Error, secret %s, not found from in namespace %s: %v\n", mysqlSecretName, namespace, err)
+		fmt.Printf("MoodleController.go  : Error, secret %s, not found from in namespace %s: %v\n", mysqlSecretName, namespace, err)
 	}
 	if _, ok := secret.Data[mysqlPasswordField]; !ok {
-		fmt.Printf("Error, secret  %s, does not have %s field.\n", mysqlSecretName, mysqlPasswordField)
+		fmt.Printf("MoodleController.go  : Error, secret  %s, does not have %s field.\n", mysqlSecretName, mysqlPasswordField)
 	}
 	mysqlUserPassword := string(secret.Data[mysqlPasswordField])
 
-	fmt.Printf("MySQL Password:%s\n", mysqlUserPassword)
+	fmt.Printf("MoodleController.go  : MySQL Password:%s\n", mysqlUserPassword)
 
 	moodleAdminEmail := foo.Spec.MoodleAdminEmail
-	fmt.Printf("Moodle Admin Email:%v\n", moodleAdminEmail)
+	fmt.Printf("MoodleController.go  : Moodle Admin Email:%v\n", moodleAdminEmail)
 
 	mysqlServiceClient := c.kubeclientset.CoreV1().Services(namespace)
 	mysqlServiceResult, err := mysqlServiceClient.Get(mysqlServiceName, metav1.GetOptions{})
 
 	if err != nil {
-		fmt.Printf("Error getting MySQL Service details: %v\n", err)
+		fmt.Printf("MoodleController.go  : Error getting MySQL Service details: %v\n", err)
 		return err, "", secretName
 	}
 
 	//mysqlHostIP := mysqlServiceResult.Spec.ClusterIP
 	mysqlHostIP := mysqlServiceName
 	mysqlServicePortInt := mysqlServiceResult.Spec.Ports[0].Port
-	fmt.Println("MySQL Service Port int:%d\n", mysqlServicePortInt)
+	fmt.Printf("MoodleController.go  : MySQL Service Port int:%d\n", mysqlServicePortInt)
 	mysqlServicePort := fmt.Sprint(mysqlServicePortInt)
-	fmt.Println("MySQL Service Port:%d\n", mysqlServicePort)
-	fmt.Println("MySQL Host IP:%s\n", mysqlHostIP)
+	fmt.Printf("MoodleController.go  : MySQL Service Port:%s\n", mysqlServicePort)
+	fmt.Printf("MoodleController.go  : MySQL Host IP:%s\n", mysqlHostIP)
 
 	CONTAINER_PORT := MOODLE_PORT
 
 	HOST_NAME := deploymentName + ":" + strconv.Itoa(MOODLE_PORT)
-	fmt.Println("HOST_NAME:%s\n", HOST_NAME)
+	fmt.Printf("MoodleController.go  : HOST_NAME:%s\n", HOST_NAME)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: deploymentName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: API_VERSION,
-					Kind:       MOODLE_KIND,
+					APIVersion: constants.API_VERSION,
+					Kind:       constants.MOODLE_KIND,
 					Name:       foo.Name,
 					UID:        foo.UID,
 				},
@@ -487,7 +357,7 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
 						{
-							Name:  CONTAINER_NAME,
+							Name:  constants.CONTAINER_NAME,
 							Image: image,
 							Lifecycle: &apiv1.Lifecycle{
 								PostStart: &apiv1.Handler{
@@ -594,15 +464,17 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 	}
 
 	// Create Deployment
-	fmt.Println("Creating deployment...")
+	fmt.Println("MoodleController.go  : Creating deployment...")
 	result, err := deploymentsClient.Create(deployment)
 	if err != nil {
 		panic(err)
 		return err, "", ""
 	}
-	fmt.Printf("Created deployment %q.\n", result.GetObjectMeta().GetName())
+	fmt.Printf("MoodleController.go  : Created deployment %q.\n", result.GetObjectMeta().GetName())
 
-	moodlePodName, podReady := c.waitForPod(foo)
+	podname, _ := c.util.GetPodFullName(constants.TIMEOUT, foo.Name, foo.Namespace)
+	fmt.Println("!!! podname: ", podname)
+	moodlePodName, podReady := c.util.WaitForPod(constants.TIMEOUT, podname, foo.Namespace)
 
 	if podReady {
 		return nil, moodlePodName, secretName
@@ -612,21 +484,21 @@ func (c *Controller) createDeployment(foo *operatorv1.Moodle) (error, string, st
 	}
 }
 
-func (c *Controller) createSecret(foo *operatorv1.Moodle, adminPassword string) string {
+func (c *MoodleController) createSecret(foo *operatorv1.Moodle, adminPassword string) string {
 
-	fmt.Println("Inside createSecret")
+	fmt.Println("MoodleController.go  : Inside createSecret")
 	secretName := foo.Name
 
-	fmt.Printf("Secret Name:%s\n", secretName)
-	fmt.Printf("Admin Password:%s\n", adminPassword)
+	fmt.Printf("MoodleController.go  : Secret Name:%s\n", secretName)
+	fmt.Printf("MoodleController.go  : Admin Password:%s\n", adminPassword)
 
 	secret := &apiv1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: secretName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: API_VERSION,
-					Kind:       MOODLE_KIND,
+					APIVersion: constants.API_VERSION,
+					Kind:       constants.MOODLE_KIND,
 					Name:       foo.Name,
 					UID:        foo.UID,
 				},
@@ -643,18 +515,18 @@ func (c *Controller) createSecret(foo *operatorv1.Moodle, adminPassword string) 
 	namespace := getNamespace(foo)
 	secretsClient := c.kubeclientset.CoreV1().Secrets(namespace)
 
-	fmt.Println("Creating secrets..")
+	fmt.Println("MoodleController.go  : Creating secrets..")
 	result, err := secretsClient.Create(secret)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Created Secret %q.\n", result.GetObjectMeta().GetName())
+	fmt.Printf("MoodleController.go  : Created Secret %q.\n", result.GetObjectMeta().GetName())
 	return secretName
 }
 
-func (c *Controller) createService(foo *operatorv1.Moodle) string {
+func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 
-	fmt.Println("Inside createService")
+	fmt.Println("MoodleController.go  : Inside createService")
 	deploymentName := foo.Name
 	moodlePort := MOODLE_PORT
 
@@ -665,8 +537,8 @@ func (c *Controller) createService(foo *operatorv1.Moodle) string {
 			Name: deploymentName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: API_VERSION,
-					Kind:       MOODLE_KIND,
+					APIVersion: constants.API_VERSION,
+					Kind:       constants.MOODLE_KIND,
 					Name:       foo.Name,
 					UID:        foo.UID,
 				},
@@ -697,7 +569,7 @@ func (c *Controller) createService(foo *operatorv1.Moodle) string {
 	if err1 != nil {
 		panic(err1)
 	}
-	fmt.Printf("Created service %q.\n", result1.GetObjectMeta().GetName())
+	fmt.Printf("MoodleController.go  : Created service %q.\n", result1.GetObjectMeta().GetName())
 
 	//nodePort1 := result1.Spec.Ports[0].NodePort
 	//nodePort := fmt.Sprint(nodePort1)
@@ -705,32 +577,31 @@ func (c *Controller) createService(foo *operatorv1.Moodle) string {
 
 	// Parse ServiceIP and Port
 	serviceIP := result1.Spec.ClusterIP
-	fmt.Println("Moodle Service IP:%s", serviceIP)
+	fmt.Printf("MoodleController.go  : Moodle Service IP:%s", serviceIP)
 
 	//servicePortInt := result1.Spec.Ports[0].Port
 	//servicePort := fmt.Sprint(servicePortInt)
 
 	serviceURI := serviceIP + ":" + servicePort
 
-	fmt.Printf("Service URI%s\n", serviceURI)
+	fmt.Printf("MoodleController.go  : Service URI%s\n", serviceURI)
 
 	return servicePort
 }
+func (c *MoodleController) handlePluginDeployment(moodle *operatorv1.Moodle) (string, []string, []string) {
 
-func (c *Controller) handlePluginDeployment(foo *operatorv1.Moodle) (string, []string, []string) {
+	installedPlugins := moodle.Status.InstalledPlugins
+	specPlugins := moodle.Spec.Plugins
+	unsupportedPlugins := moodle.Status.UnsupportedPlugins
 
-	installedPlugins := foo.Status.InstalledPlugins
-	specPlugins := foo.Spec.Plugins
-	unsupportedPlugins := foo.Status.UnsupportedPlugins
-
-	fmt.Printf("Spec Plugins:%v\n", specPlugins)
-	fmt.Printf("Installed Plugins:%v\n", installedPlugins)
+	fmt.Printf("MoodleController.go  : Spec Plugins:%v\n", specPlugins)
+	fmt.Printf("MoodleController.go  : Installed Plugins:%v\n", installedPlugins)
 	var addList []string
 	var removeList []string
 
 	// addList = specList - installedList - unsupportedPlugins
 	addList = c.getDiff(specPlugins, installedPlugins)
-	fmt.Println("Plugins to install:%v\n", addList)
+	fmt.Printf("MoodleController.go  : Plugins to install:%v\n", addList)
 
 	if unsupportedPlugins != nil {
 		addList = c.getDiff(addList, unsupportedPlugins)
@@ -738,18 +609,19 @@ func (c *Controller) handlePluginDeployment(foo *operatorv1.Moodle) (string, []s
 
 	// removeList = installedList - specList
 	removeList = c.getDiff(installedPlugins, specPlugins)
-	fmt.Println("Plugins to remove:%v\n", removeList)
+	fmt.Printf("MoodleController.go  : Plugins to remove:%v\n", removeList)
 
 	var podName string
 	var supportedPlugins, unsupportedPlugins1 []string
 	supportedPlugins, unsupportedPlugins1 = c.getSupportedPlugins(addList)
 	if len(supportedPlugins) > 0 {
-		podName = foo.Status.PodName
-		namespace := getNamespace(foo)
-		c.installPlugins(supportedPlugins, podName, namespace)
+		podName = moodle.Status.PodName
+		namespace := getNamespace(moodle)
+		podname, _ := c.util.GetPodFullName(constants.TIMEOUT, podName, namespace)
+		c.util.EnsurePluginsInstalled(moodle, podname, namespace, constants.PLUGIN_MAP)
 	}
 	if len(removeList) > 0 {
-		fmt.Println("============= Plugin removal not implemented yet ===============")
+		fmt.Println("MoodleController.go  : ============= Plugin removal not implemented yet ===============")
 	}
 
 	/*
@@ -762,7 +634,7 @@ func (c *Controller) handlePluginDeployment(foo *operatorv1.Moodle) (string, []s
 	return podName, supportedPlugins, unsupportedPlugins1
 }
 
-func (c *Controller) getDiff(leftHandSide, rightHandSide []string) []string {
+func (c *MoodleController) getDiff(leftHandSide, rightHandSide []string) []string {
 	var diffList []string
 	for _, inspec := range leftHandSide {
 		var found = false
@@ -779,15 +651,14 @@ func (c *Controller) getDiff(leftHandSide, rightHandSide []string) []string {
 	return diffList
 }
 
-func (c *Controller) isInitialDeployment(foo *operatorv1.Moodle) bool {
+func (c *MoodleController) isInitialDeployment(foo *operatorv1.Moodle) bool {
 	if foo.Status.Url == "" {
 		return true
 	} else {
 		return false
 	}
 }
-
-func (c *Controller) waitForPod(foo *operatorv1.Moodle) (string, bool) {
+func (c *MoodleController) waitForPod(foo *operatorv1.Moodle) (string, bool) {
 	var podName string
 	deploymentName := foo.Name
 	namespace := getNamespace(foo)
@@ -840,7 +711,7 @@ func (c *Controller) waitForPod(foo *operatorv1.Moodle) (string, bool) {
 	return podName, podReady
 }
 
-func (c *Controller) getPods(namespace, deploymentName string) *apiv1.PodList {
+func (c *MoodleController) getPods(namespace, deploymentName string) *apiv1.PodList {
 	// TODO(devkulkarni): This is returning all Pods. We should change this
 	// to only return Pods whose Label matches the Deployment Name.
 	pods, err := c.kubeclientset.CoreV1().Pods(namespace).List(metav1.ListOptions{
