@@ -43,33 +43,19 @@ func (c *MoodleController) deployMoodle(foo *operatorv1.Moodle) (string, string,
 
 	plugins := foo.Spec.Plugins
 
-	supportedPlugins, unsupportedPlugins = c.getSupportedPlugins(plugins)
-
+	supportedPlugins, unsupportedPlugins = c.util.GetSupportedPlugins(plugins)
 	if len(supportedPlugins) > 0 {
 		namespace := getNamespace(foo)
-		fmt.Println("!!!!" + moodlePodName)
-		erredPlugins = c.util.EnsurePluginsInstalled(foo, moodlePodName, namespace, constants.PLUGIN_MAP)
+		erredPlugins = c.util.EnsurePluginsInstalled(foo, supportedPlugins, moodlePodName, namespace, constants.PLUGIN_MAP)
+	}
+	if len(erredPlugins) > 0 {
+		err = errors.New("Error Installing Supported Plugin")
 	}
 
 	serviceURIToReturn = foo.Name + ":" + servicePort
 	fmt.Println("MoodleController.go  : MoodleController.go: Returning from deployMoodle")
 
-	return serviceURIToReturn, moodlePodName, secretName, unsupportedPlugins, erredPlugins, nil
-}
-
-func (c *MoodleController) getSupportedPlugins(plugins []string) ([]string, []string) {
-
-	var supportedPlugins, unsupportedPlugins []string
-
-	for _, p := range plugins {
-		if _, ok := constants.PLUGIN_MAP[p]; ok {
-			supportedPlugins = append(supportedPlugins, p)
-		} else {
-			unsupportedPlugins = append(unsupportedPlugins, p)
-		}
-	}
-	fmt.Printf("MoodleController.go  : Supported Plugins: %v\n", supportedPlugins)
-	return supportedPlugins, unsupportedPlugins
+	return serviceURIToReturn, moodlePodName, secretName, unsupportedPlugins, erredPlugins, err
 }
 
 func (c *MoodleController) generatePassword(moodlePort int) string {
@@ -363,7 +349,7 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 								PostStart: &apiv1.Handler{
 									Exec: &apiv1.ExecAction{
 										Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh; sleep 5; if [ ! -f /var/run/nginx.pid ]; then nohup /usr/sbin/nginx >& /dev/null; else /usr/sbin/nginx -s reload; fi"},
-										//Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh; sleep 5; /usr/sbin/nginx -s reload"},
+										// Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh; sleep 5; /usr/sbin/nginx -s reload"},
 										//Command: []string{"/bin/sh", "-c", "/usr/local/scripts/moodleinstall.sh"},
 									},
 								},
@@ -473,7 +459,6 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 	fmt.Printf("MoodleController.go  : Created deployment %q.\n", result.GetObjectMeta().GetName())
 
 	podname, _ := c.util.GetPodFullName(constants.TIMEOUT, foo.Name, foo.Namespace)
-	fmt.Println("!!! podname: ", podname)
 	moodlePodName, podReady := c.util.WaitForPod(constants.TIMEOUT, podname, foo.Namespace)
 
 	if podReady {
@@ -588,7 +573,7 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 
 	return servicePort
 }
-func (c *MoodleController) handlePluginDeployment(moodle *operatorv1.Moodle) (string, []string, []string) {
+func (c *MoodleController) handlePluginDeployment(moodle *operatorv1.Moodle) (string, []string, []string, []string) {
 
 	installedPlugins := moodle.Status.InstalledPlugins
 	specPlugins := moodle.Spec.Plugins
@@ -613,12 +598,14 @@ func (c *MoodleController) handlePluginDeployment(moodle *operatorv1.Moodle) (st
 
 	var podName string
 	var supportedPlugins, unsupportedPlugins1 []string
-	supportedPlugins, unsupportedPlugins1 = c.getSupportedPlugins(addList)
+	supportedPlugins, unsupportedPlugins1 = c.util.GetSupportedPlugins(addList)
+
+	var erredPlugins []string
 	if len(supportedPlugins) > 0 {
 		podName = moodle.Status.PodName
 		namespace := getNamespace(moodle)
 		podname, _ := c.util.GetPodFullName(constants.TIMEOUT, podName, namespace)
-		c.util.EnsurePluginsInstalled(moodle, podname, namespace, constants.PLUGIN_MAP)
+		erredPlugins = c.util.EnsurePluginsInstalled(moodle, supportedPlugins, podname, namespace, constants.PLUGIN_MAP)
 	}
 	if len(removeList) > 0 {
 		fmt.Println("MoodleController.go  : ============= Plugin removal not implemented yet ===============")
@@ -631,7 +618,7 @@ func (c *MoodleController) handlePluginDeployment(moodle *operatorv1.Moodle) (st
 	      return podName, supportedPlugins, unsupportedPlugins
 	   }*/
 
-	return podName, supportedPlugins, unsupportedPlugins1
+	return podName, supportedPlugins, unsupportedPlugins1, erredPlugins
 }
 
 func (c *MoodleController) getDiff(leftHandSide, rightHandSide []string) []string {

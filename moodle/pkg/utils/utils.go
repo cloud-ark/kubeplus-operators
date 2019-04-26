@@ -125,6 +125,7 @@ func (u *Utils) ExecuteExecCall(moodlePodName, namespace, command string) bool {
 }
 
 func (u *Utils) EnsurePluginsInstalled(moodle *operatorv1.Moodle,
+	supportedPlugins []string,
 	name,
 	namespace string,
 	pluginData map[string]map[string]string) []string {
@@ -133,9 +134,9 @@ func (u *Utils) EnsurePluginsInstalled(moodle *operatorv1.Moodle,
 	defer mutex.Unlock()
 	fmt.Println("Inside EnsurePluginsInstalled")
 
-	plugins := moodle.Spec.Plugins
 	erredPlugins := make([]string, 0)
-	for _, pluginName := range plugins {
+
+	for _, pluginName := range supportedPlugins {
 		fmt.Printf("  Installing plugin %s\n", pluginName)
 		pluginInstallDetails := pluginData[pluginName]
 
@@ -208,4 +209,17 @@ func (u *Utils) GetPodFullName(timeout int, podname, namespace string) (string, 
 		time.Sleep(time.Second * 4)
 		elapsed += 4
 	}
+}
+func (u *Utils) GetSupportedPlugins(plugins []string) ([]string, []string) {
+
+	var supportedPlugins, unsupportedPlugins []string
+
+	for _, p := range plugins {
+		if _, ok := constants.PLUGIN_MAP[p]; ok {
+			supportedPlugins = append(supportedPlugins, p)
+		} else {
+			unsupportedPlugins = append(unsupportedPlugins, p)
+		}
+	}
+	return supportedPlugins, unsupportedPlugins
 }

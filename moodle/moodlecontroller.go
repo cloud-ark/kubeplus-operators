@@ -339,13 +339,13 @@ func (c *MoodleController) syncHandler(key string) error {
 			status = "Ready"
 			url = "http://" + serviceURL
 			fmt.Printf("MoodleController.go  : Moodle URL:%s\n", url)
-			correctlyInstalledPlugins = c.getDiff(plugins, erredPlugins)
+			supportedPlugins, unsupportedPlugins = c.util.GetSupportedPlugins(plugins)
+			correctlyInstalledPlugins = c.getDiff(supportedPlugins, erredPlugins)
 		}
-
 		c.updateMoodleStatus(foo, podName, secretName, status, url, &correctlyInstalledPlugins, &unsupportedPlugins)
 		c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 	} else {
-		podName, installedPlugins, unsupportedPluginsCurrent := c.handlePluginDeployment(foo)
+		podName, installedPlugins, unsupportedPluginsCurrent, erredPlugins := c.handlePluginDeployment(foo)
 		if len(installedPlugins) > 0 || len(unsupportedPluginsCurrent) > 0 {
 			status = "Ready"
 			url = foo.Status.Url
@@ -354,8 +354,11 @@ func (c *MoodleController) syncHandler(key string) error {
 
 			supportedPlugins = foo.Status.InstalledPlugins
 			supportedPlugins = append(supportedPlugins, installedPlugins...)
-
-			c.updateMoodleStatus(foo, podName, "", status, url, &supportedPlugins, &unsupportedPlugins)
+			if len(erredPlugins) > 0 {
+				c.updateMoodleStatus(foo, podName, "", "Error in installing some plugins", url, &supportedPlugins, &unsupportedPlugins)
+			} else {
+				c.updateMoodleStatus(foo, podName, "", status, url, &supportedPlugins, &unsupportedPlugins)
+			}
 			c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
 		} else {
 			fmt.Printf("MoodleController.go  : Moodle custom resource %s did not change. No plugin installed.\n", moodleName)
