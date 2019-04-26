@@ -214,7 +214,8 @@ func (c *PodController) handlePod(key string) error {
 	if _, success := c.util.WaitForPod(constants.TIMEOUT, name, namespace); !success {
 		return fmt.Errorf("PodController.go: The Moodle Pod failed to start running")
 	}
-	erredPlugins := c.util.EnsurePluginsInstalled(moodle, name, namespace, constants.PLUGIN_MAP)
+	supported, _ := c.util.GetSupportedPlugins(moodle.Spec.Plugins)
+	erredPlugins := c.util.EnsurePluginsInstalled(moodle, supported, name, namespace, constants.PLUGIN_MAP)
 	if len(erredPlugins) > 0 {
 		return fmt.Errorf("PodController.go: Some plugins failed to install. Cannot ensure state. %v", erredPlugins)
 	}
