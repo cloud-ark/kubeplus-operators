@@ -4,4 +4,4 @@ sources:
 - https://github.com/cloud-ark/kubeplus-operators/releases/tag/v1
 description: A Helm chart for Moodle Operator 
 name: moodle-operator-chart
-version: 0.3.0
+version: 0.4.4
