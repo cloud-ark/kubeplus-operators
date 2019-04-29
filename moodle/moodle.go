@@ -317,10 +317,11 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 
 	CONTAINER_PORT := MOODLE_PORT
 
+	HOST_NAME := ""
 	if foo.Spec.DomainName != "" {
-		HOST_NAME := foo.Spec.DomainName + ":" + strconv.Itoa(MOODLE_PORT)
+		HOST_NAME = foo.Spec.DomainName + ":" + strconv.Itoa(MOODLE_PORT)
 	} else {
-		HOST_NAME := deploymentName + ":" + strconv.Itoa(MOODLE_PORT)
+		HOST_NAME = deploymentName + ":" + strconv.Itoa(MOODLE_PORT)
 	}
 
 	fmt.Printf("MoodleController.go  : HOST_NAME:%s\n", HOST_NAME)
