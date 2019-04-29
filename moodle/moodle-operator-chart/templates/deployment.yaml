@@ -49,7 +49,7 @@ spec:
       containers:
       - name: moodle-operator
         image: lmecld/moodle-operator:0.4.4
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         command: [ "/moodle"]
         env:
         - name: HOST_IP

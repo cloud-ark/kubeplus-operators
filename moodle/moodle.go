@@ -52,10 +52,10 @@ func (c *MoodleController) deployMoodle(foo *operatorv1.Moodle) (string, string,
 		err = errors.New("Error Installing Supported Plugin")
 	}
 
-	if foo.Spec.DomainName != "" {
-		serviceURIToReturn = foo.Spec.DomainName + ":" + servicePort
-	} else {
+	if foo.Spec.DomainName == "" {
 		serviceURIToReturn = foo.Name + ":" + servicePort
+	} else {
+		serviceURIToReturn = foo.Spec.DomainName + ":" + servicePort
 	}
 
 	fmt.Println("MoodleController.go  : MoodleController.go: Returning from deployMoodle")
@@ -318,10 +318,10 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 	CONTAINER_PORT := MOODLE_PORT
 
 	HOST_NAME := ""
-	if foo.Spec.DomainName != "" {
-		HOST_NAME = foo.Spec.DomainName + ":" + strconv.Itoa(MOODLE_PORT)
-	} else {
+	if foo.Spec.DomainName == "" {
 		HOST_NAME = deploymentName + ":" + strconv.Itoa(MOODLE_PORT)
+	} else {
+		HOST_NAME = foo.Spec.DomainName + ":" + strconv.Itoa(MOODLE_PORT)
 	}
 
 	fmt.Printf("MoodleController.go  : HOST_NAME:%s\n", HOST_NAME)
