@@ -160,6 +160,7 @@ func (c *PodController) enqueuePod(obj interface{}) {
 	fmt.Printf("PodController.go     : enqueuePod, adding a pod key %s\n", key)
 	c.podqueue.AddRateLimited(key)
 }
+
 func (c *PodController) handlePod(key string) error {
 	// Convert the namespace/name string into a distinct namespace and name
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)

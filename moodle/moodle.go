@@ -267,9 +267,14 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 	if claimName == "" {
 		claimName = foo.Name
 	}
-	adminPassword := c.generatePassword(MOODLE_PORT)
 
-	secretName := c.createSecret(foo, adminPassword)
+	secretName := ""
+	adminPassword := ""
+	secretName, adminPassword = c.getSecret(foo)
+	if adminPassword == "" {
+		adminPassword = c.generatePassword(MOODLE_PORT)
+		secretName = c.createSecret(foo, adminPassword)
+	}
 
 	//MySQL Service IP and Port
 	mysqlServiceName := foo.Spec.MySQLServiceName
@@ -480,6 +485,34 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 	}
 }
 
+func (c *MoodleController) getSecret(foo *operatorv1.Moodle) (string, string) {
+	fmt.Println("MoodleController.go  : Inside getSecret")
+	secretName := foo.Name
+
+	namespace := getNamespace(foo)
+	secretsClient := c.kubeclientset.CoreV1().Secrets(namespace)
+
+	fmt.Println("MoodleController.go  : Getting secrets..")
+	result, err := secretsClient.Get(secretName, metav1.GetOptions{})
+	if err != nil {
+		fmt.Printf("MoodleController.go : %v", err)
+		//panic(err)
+	}
+	if result != nil {
+		fmt.Printf("MoodleController.go  : Getting Secret %q.\n", result.GetObjectMeta().GetName())
+
+		adminPasswordByteArray := result.Data["adminPassword"]
+		adminPassword := string(adminPasswordByteArray)
+
+		fmt.Printf("MoodleController.go  : Admin Password %q.\n", adminPassword)
+
+		return secretName, adminPassword
+
+	} else {
+		return "", ""
+	}
+}
+
 func (c *MoodleController) createSecret(foo *operatorv1.Moodle, adminPassword string) string {
 
 	fmt.Println("MoodleController.go  : Inside createSecret")
@@ -558,6 +591,7 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 			},
 			Type: apiv1.ServiceTypeNodePort,
 			//Type: apiv1.ServiceTypeClusterIP,
+			//Type: apiv1.ServiceTypeLoadBalancer,
 		},
 	}
 
