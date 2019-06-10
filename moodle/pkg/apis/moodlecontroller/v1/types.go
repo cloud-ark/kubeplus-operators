@@ -35,6 +35,8 @@ type MoodleSpec struct {
 	PVCVolumeName string `json:"PVCVolumeName"`
 	//Domain Name
 	DomainName string `json:"domainName"`
+	//Domain Cert SecretName
+	DomainCertSecretName string `json:"domainCertSecretName"`
 }
 
 // MoodleStatus is the status for a Moodle resource
