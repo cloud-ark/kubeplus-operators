@@ -110,14 +110,24 @@ func getNamespace(foo *operatorv1.Moodle) string {
 func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 
 	moodleName := foo.Name
+	moodleDomainName := foo.Spec.DomainName
+	moodleTLSCertSecretName := foo.Spec.DomainCertSecretName
 
-	moodlePath := "/" + moodleName
+	//moodlePath := "/" + moodleName
+	moodlePath := "/"
 	moodleServiceName := moodleName
+
 	moodlePort := MOODLE_PORT
 
 	ingress := &extensionsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: moodleName,
+			Annotations: map[string]string{
+				"kubernetes.io/ingress.class": "nginx",
+				"nginx.ingress.kubernetes.io/rewrite-target": "/",
+				"certmanager.k8s.io/issuer": moodleName,
+				"certmanager.k8s.io/acme-challenge-type": "http01",
+			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: constants.API_VERSION,
@@ -128,8 +138,15 @@ func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 			},
 		},
 		Spec: extensionsv1beta1.IngressSpec{
+			TLS: []extensionsv1beta1.IngressTLS{
+				{
+					Hosts: []string{moodleDomainName},
+					SecretName: moodleTLSCertSecretName,
+				},
+			},
 			Rules: []extensionsv1beta1.IngressRule{
 				{
+					Host: moodleDomainName,
 					IngressRuleValue: extensionsv1beta1.IngressRuleValue{
 						HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
 							Paths: []extensionsv1beta1.HTTPIngressPath{
@@ -257,9 +274,11 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 	deploymentsClient := c.kubeclientset.AppsV1().Deployments(namespace)
 
 	deploymentName := foo.Name
+
 	moodlePort := MOODLE_PORT
 
 	image := "lmecld/nginxformoodle8:latest"
+	//image := "lmecld/nginxformoodle:9.0"
 	//image := "lmecld/nginxformoodle6:latest"
 	volumeName := "moodle-data"
 
@@ -582,15 +601,15 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 					Name:       "my-port",
 					Port:       int32(moodlePort),
 					TargetPort: apiutil.FromInt(moodlePort),
-					NodePort:   int32(MOODLE_PORT),
+					//NodePort:   int32(MOODLE_PORT),
 					Protocol:   apiv1.ProtocolTCP,
 				},
 			},
 			Selector: map[string]string{
 				"app": deploymentName,
 			},
-			Type: apiv1.ServiceTypeNodePort,
-			//Type: apiv1.ServiceTypeClusterIP,
+			//Type: apiv1.ServiceTypeNodePort,
+			Type: apiv1.ServiceTypeClusterIP,
 			//Type: apiv1.ServiceTypeLoadBalancer,
 		},
 	}
