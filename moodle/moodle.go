@@ -111,7 +111,7 @@ func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 
 	moodleName := foo.Name
 	moodleDomainName := foo.Spec.DomainName
-	moodleTLSCertSecretName := foo.Spec.DomainCertSecretName
+	moodleTLSCertSecretName := moodleName + "-domain-cert"
 
 	//moodlePath := "/" + moodleName
 	moodlePath := "/"
