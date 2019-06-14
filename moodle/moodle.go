@@ -113,11 +113,17 @@ func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 	moodleDomainName := foo.Spec.DomainName
 	moodleTLSCertSecretName := moodleName + "-domain-cert"
 
-	//moodlePath := "/" + moodleName
 	moodlePath := "/"
+	if moodleDomainName == "" {
+		moodlePath = moodlePath + moodleName
+	}
+
 	moodleServiceName := moodleName
 
 	moodlePort := MOODLE_PORT
+
+	specObj := getIngressSpec(moodlePort, moodleDomainName, moodlePath, 
+		moodleTLSCertSecretName, moodleServiceName)
 
 	ingress := &extensionsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -137,6 +143,8 @@ func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 				},
 			},
 		},
+		Spec: specObj,
+		/*
 		Spec: extensionsv1beta1.IngressSpec{
 			TLS: []extensionsv1beta1.IngressTLS{
 				{
@@ -163,6 +171,7 @@ func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 				},
 			},
 		},
+		*/
 	}
 
 	namespace := getNamespace(foo)
@@ -174,6 +183,63 @@ func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 		panic(err)
 	}
 	fmt.Printf("MoodleController.go  : Created Ingress %q.\n", result.GetObjectMeta().GetName())
+}
+
+func getIngressSpec(moodlePort int, moodleDomainName, moodlePath, moodleTLSCertSecretName, 
+	moodleServiceName string) extensionsv1beta1.IngressSpec {
+
+	var specObj extensionsv1beta1.IngressSpec
+
+	if moodleDomainName != "" {
+		specObj = extensionsv1beta1.IngressSpec{
+			TLS: []extensionsv1beta1.IngressTLS{
+				{
+					Hosts: []string{moodleDomainName},
+					SecretName: moodleTLSCertSecretName,
+				},
+			},
+			Rules: []extensionsv1beta1.IngressRule{
+				{
+					Host: moodleDomainName,
+					IngressRuleValue: extensionsv1beta1.IngressRuleValue{
+						HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
+							Paths: []extensionsv1beta1.HTTPIngressPath{
+								{
+									Path: moodlePath,
+									Backend: extensionsv1beta1.IngressBackend{
+										ServiceName: moodleServiceName,
+										ServicePort: apiutil.FromInt(moodlePort),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	} else {
+		specObj = extensionsv1beta1.IngressSpec{
+			Rules: []extensionsv1beta1.IngressRule{
+				{
+					IngressRuleValue: extensionsv1beta1.IngressRuleValue{
+						HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
+							Paths: []extensionsv1beta1.HTTPIngressPath{
+								{
+									Path: moodlePath,
+									Backend: extensionsv1beta1.IngressBackend{
+										ServiceName: moodleServiceName,
+										ServicePort: apiutil.FromInt(moodlePort),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	return specObj
 }
 
 func (c *MoodleController) createPersistentVolume(foo *operatorv1.Moodle) {
@@ -493,8 +559,12 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 	}
 	fmt.Printf("MoodleController.go  : Created deployment %q.\n", result.GetObjectMeta().GetName())
 
+	/*
 	podname, _ := c.util.GetPodFullName(constants.TIMEOUT, foo.Name, foo.Namespace)
 	moodlePodName, podReady := c.util.WaitForPod(constants.TIMEOUT, podname, foo.Namespace)
+	*/
+
+	moodlePodName, podReady := c.waitForPod(foo)
 
 	if podReady {
 		return nil, moodlePodName, secretName
@@ -580,6 +650,8 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 
 	namespace := getNamespace(foo)
 	serviceClient := c.kubeclientset.CoreV1().Services(namespace)
+
+	serviceObj := getServiceSpec(moodlePort, deploymentName, foo.Spec.DomainName)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: deploymentName,
@@ -595,6 +667,9 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 				"app": deploymentName,
 			},
 		},
+		Spec: serviceObj, 
+
+		/*
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{
@@ -611,7 +686,7 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 			//Type: apiv1.ServiceTypeNodePort,
 			Type: apiv1.ServiceTypeClusterIP,
 			//Type: apiv1.ServiceTypeLoadBalancer,
-		},
+		},*/
 	}
 
 	result1, err1 := serviceClient.Create(service)
@@ -637,6 +712,51 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 
 	return servicePort
 }
+
+func getServiceSpec(moodlePort int, deploymentName, domainName string) apiv1.ServiceSpec {
+
+	var serviceObj apiv1.ServiceSpec
+
+	if domainName == "" {
+		serviceObj = apiv1.ServiceSpec{
+			Ports: []apiv1.ServicePort{
+				{
+					Name:       "my-port",
+					Port:       int32(moodlePort),
+					TargetPort: apiutil.FromInt(moodlePort),
+					NodePort:   int32(moodlePort),
+					Protocol:   apiv1.ProtocolTCP,
+				},
+			},
+			Selector: map[string]string{
+				"app": deploymentName,
+			},
+			Type: apiv1.ServiceTypeNodePort,
+			//Type: apiv1.ServiceTypeClusterIP,
+			//Type: apiv1.ServiceTypeLoadBalancer,
+		} 
+	} else {
+		serviceObj = apiv1.ServiceSpec{
+			Ports: []apiv1.ServicePort{
+				{
+					Name:       "my-port",
+					Port:       int32(moodlePort),
+					TargetPort: apiutil.FromInt(moodlePort),
+					//NodePort:   int32(MOODLE_PORT),
+					Protocol:   apiv1.ProtocolTCP,
+				},
+			},
+			Selector: map[string]string{
+				"app": deploymentName,
+			},
+			//Type: apiv1.ServiceTypeNodePort,
+			Type: apiv1.ServiceTypeClusterIP,
+			//Type: apiv1.ServiceTypeLoadBalancer,
+		}
+	}
+	return serviceObj
+}
+
 func (c *MoodleController) handlePluginDeployment(moodle *operatorv1.Moodle) (string, []string, []string, []string) {
 
 	installedPlugins := moodle.Status.InstalledPlugins
@@ -668,8 +788,8 @@ func (c *MoodleController) handlePluginDeployment(moodle *operatorv1.Moodle) (st
 	if len(supportedPlugins) > 0 {
 		podName = moodle.Status.PodName
 		namespace := getNamespace(moodle)
-		podname, _ := c.util.GetPodFullName(constants.TIMEOUT, podName, namespace)
-		erredPlugins = c.util.EnsurePluginsInstalled(moodle, supportedPlugins, podname, namespace, constants.PLUGIN_MAP)
+		//podname, _ := c.util.GetPodFullName(constants.TIMEOUT, podName, namespace)
+		erredPlugins = c.util.EnsurePluginsInstalled(moodle, supportedPlugins, podName, namespace, constants.PLUGIN_MAP)
 	}
 	if len(removeList) > 0 {
 		fmt.Println("MoodleController.go  : ============= Plugin removal not implemented yet ===============")
