@@ -48,12 +48,12 @@ spec:
     spec:
       containers:
       - name: moodle-operator
-        image: lmecld/moodle-operator:0.4.7
+        image: lmecld/moodle-operator:0.4.8
         imagePullPolicy: Always
         command: [ "/moodle"]
-        env:
-        - name: HOST_IP
-          value: {{ .Values.HOST_IP }}
+        #env:
+        #- name: HOST_IP
+        #  value: {{ .Values.HOST_IP }}
         #env:
         #- name: HOST_IP
         #  valueFrom:
