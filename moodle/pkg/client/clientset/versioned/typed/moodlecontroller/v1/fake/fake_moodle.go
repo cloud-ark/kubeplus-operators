@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -119,7 +119,7 @@ func (c *FakeMoodles) DeleteCollection(options *v1.DeleteOptions, listOptions v1
 // Patch applies the patch and returns the patched moodle.
 func (c *FakeMoodles) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *moodlecontrollerv1.Moodle, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(moodlesResource, c.ns, name, data, subresources...), &moodlecontrollerv1.Moodle{})
+		Invokes(testing.NewPatchSubresourceAction(moodlesResource, c.ns, name, pt, data, subresources...), &moodlecontrollerv1.Moodle{})
 
 	if obj == nil {
 		return nil, err

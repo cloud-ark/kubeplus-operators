@@ -110,69 +110,29 @@ func getNamespace(foo *operatorv1.Moodle) string {
 func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 
 	moodleName := foo.Name
-	moodleDomainName := foo.Spec.DomainName
-	moodleTLSCertSecretName := moodleName + "-domain-cert"
+
+	moodleTLSCertSecretName := ""
+	tls := foo.Spec.Tls
+
+	fmt.Printf("MoodleController.go: TLS: %s\n", tls)
+	if len(tls) > 0  {
+		moodleTLSCertSecretName = moodleName + "-domain-cert"
+	}
 
 	moodlePath := "/"
+
+	moodleDomainName := getDomainName(foo)
 	if moodleDomainName == "" {
 		moodlePath = moodlePath + moodleName
 	}
 
 	moodleServiceName := moodleName
-
 	moodlePort := MOODLE_PORT
 
 	specObj := getIngressSpec(moodlePort, moodleDomainName, moodlePath, 
-		moodleTLSCertSecretName, moodleServiceName)
+		moodleTLSCertSecretName, moodleServiceName, tls)
 
-	ingress := &extensionsv1beta1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: moodleName,
-			Annotations: map[string]string{
-				"kubernetes.io/ingress.class": "nginx",
-				"nginx.ingress.kubernetes.io/rewrite-target": "/",
-				"certmanager.k8s.io/issuer": moodleName,
-				"certmanager.k8s.io/acme-challenge-type": "http01",
-			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: constants.API_VERSION,
-					Kind:       constants.MOODLE_KIND,
-					Name:       foo.Name,
-					UID:        foo.UID,
-				},
-			},
-		},
-		Spec: specObj,
-		/*
-		Spec: extensionsv1beta1.IngressSpec{
-			TLS: []extensionsv1beta1.IngressTLS{
-				{
-					Hosts: []string{moodleDomainName},
-					SecretName: moodleTLSCertSecretName,
-				},
-			},
-			Rules: []extensionsv1beta1.IngressRule{
-				{
-					Host: moodleDomainName,
-					IngressRuleValue: extensionsv1beta1.IngressRuleValue{
-						HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
-							Paths: []extensionsv1beta1.HTTPIngressPath{
-								{
-									Path: moodlePath,
-									Backend: extensionsv1beta1.IngressBackend{
-										ServiceName: moodleServiceName,
-										ServicePort: apiutil.FromInt(moodlePort),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		*/
-	}
+	ingress := getIngress(foo, specObj, moodleName, tls)
 
 	namespace := getNamespace(foo)
 	ingressesClient := c.kubeclientset.ExtensionsV1beta1().Ingresses(namespace)
@@ -185,12 +145,89 @@ func (c *MoodleController) createIngress(foo *operatorv1.Moodle) {
 	fmt.Printf("MoodleController.go  : Created Ingress %q.\n", result.GetObjectMeta().GetName())
 }
 
+func getIngress(foo *operatorv1.Moodle, specObj extensionsv1beta1.IngressSpec, moodleName, tls string) *extensionsv1beta1.Ingress {
+
+	var ingress *extensionsv1beta1.Ingress 
+
+	if len(tls) > 0 {
+			ingress = &extensionsv1beta1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: moodleName,
+				Annotations: map[string]string{
+					"kubernetes.io/ingress.class": "nginx",
+					"nginx.ingress.kubernetes.io/rewrite-target": "/",
+					"certmanager.k8s.io/issuer": moodleName,
+					"certmanager.k8s.io/acme-challenge-type": "http01",
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: constants.API_VERSION,
+						Kind:       constants.MOODLE_KIND,
+						Name:       foo.Name,
+						UID:        foo.UID,
+					},
+				},
+			},
+			Spec: specObj,
+		}
+	} else {
+			ingress = &extensionsv1beta1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: moodleName,
+				Annotations: map[string]string{
+					"kubernetes.io/ingress.class": "nginx",
+					"nginx.ingress.kubernetes.io/ssl-redirect": "false",
+					"nginx.ingress.kubernetes.io/rewrite-target": "/",
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: constants.API_VERSION,
+						Kind:       constants.MOODLE_KIND,
+						Name:       foo.Name,
+						UID:        foo.UID,
+					},
+				},
+			},
+			Spec: specObj,
+			/*
+			Spec: extensionsv1beta1.IngressSpec{
+				TLS: []extensionsv1beta1.IngressTLS{
+					{
+						Hosts: []string{moodleDomainName},
+						SecretName: moodleTLSCertSecretName,
+					},
+				},
+				Rules: []extensionsv1beta1.IngressRule{
+					{
+						Host: moodleDomainName,
+						IngressRuleValue: extensionsv1beta1.IngressRuleValue{
+							HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
+								Paths: []extensionsv1beta1.HTTPIngressPath{
+									{
+										Path: moodlePath,
+										Backend: extensionsv1beta1.IngressBackend{
+										ServiceName: moodleServiceName,
+										ServicePort: apiutil.FromInt(moodlePort),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		*/
+		}
+	}
+	return ingress
+}
+
 func getIngressSpec(moodlePort int, moodleDomainName, moodlePath, moodleTLSCertSecretName, 
-	moodleServiceName string) extensionsv1beta1.IngressSpec {
+	moodleServiceName, tls string) extensionsv1beta1.IngressSpec {
 
 	var specObj extensionsv1beta1.IngressSpec
 
-	if moodleDomainName != "" {
+	if len(tls) > 0 {
 		specObj = extensionsv1beta1.IngressSpec{
 			TLS: []extensionsv1beta1.IngressTLS{
 				{
@@ -208,7 +245,7 @@ func getIngressSpec(moodlePort int, moodleDomainName, moodlePath, moodleTLSCertS
 									Path: moodlePath,
 									Backend: extensionsv1beta1.IngressBackend{
 										ServiceName: moodleServiceName,
-										ServicePort: apiutil.FromInt(moodlePort),
+										ServicePort: apiutil.FromInt(80),//apiutil.FromInt(moodlePort),
 									},
 								},
 							},
@@ -221,6 +258,7 @@ func getIngressSpec(moodlePort int, moodleDomainName, moodlePath, moodleTLSCertS
 		specObj = extensionsv1beta1.IngressSpec{
 			Rules: []extensionsv1beta1.IngressRule{
 				{
+					Host: moodleDomainName,
 					IngressRuleValue: extensionsv1beta1.IngressRuleValue{
 						HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
 							Paths: []extensionsv1beta1.HTTPIngressPath{
@@ -228,7 +266,7 @@ func getIngressSpec(moodlePort int, moodleDomainName, moodlePath, moodleTLSCertS
 									Path: moodlePath,
 									Backend: extensionsv1beta1.IngressBackend{
 										ServiceName: moodleServiceName,
-										ServicePort: apiutil.FromInt(moodlePort),
+										ServicePort: apiutil.FromInt(80),
 									},
 								},
 							},
@@ -291,6 +329,7 @@ func (c *MoodleController) createPersistentVolume(foo *operatorv1.Moodle) {
 func (c *MoodleController) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
 	fmt.Println("MoodleController.go  : Inside createPersistentVolumeClaim")
 
+	storageClassName := "standard"
 	deploymentName := foo.Name
 	persistentVolumeClaim := &apiv1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -310,6 +349,7 @@ func (c *MoodleController) createPersistentVolumeClaim(foo *operatorv1.Moodle) {
 				"ReadWriteOnce",
 				//					},
 			},
+			StorageClassName: &storageClassName,
 			Resources: apiv1.ResourceRequirements{
 				Requests: apiv1.ResourceList{
 					"storage": resource.MustParse("1Gi"),
@@ -346,6 +386,8 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 	image := "lmecld/nginxformoodle8:latest"
 	//image := "lmecld/nginxformoodle:9.0"
 	//image := "lmecld/nginxformoodle6:latest"
+	//	image = "lmecld/nginxformoodle10:latest"
+
 	volumeName := "moodle-data"
 
 	claimName := foo.Spec.PVCVolumeName
@@ -397,7 +439,6 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 		return err, "", secretName
 	}
 
-	//mysqlHostIP := mysqlServiceResult.Spec.ClusterIP
 	mysqlHostIP := mysqlServiceName
 	mysqlServicePortInt := mysqlServiceResult.Spec.Ports[0].Port
 	fmt.Printf("MoodleController.go  : MySQL Service Port int:%d\n", mysqlServicePortInt)
@@ -411,7 +452,7 @@ func (c *MoodleController) createDeployment(foo *operatorv1.Moodle) (error, stri
 	if foo.Spec.DomainName == "" {
 		HOST_NAME = deploymentName + ":" + strconv.Itoa(MOODLE_PORT)
 	} else {
-		HOST_NAME = foo.Spec.DomainName + ":" + strconv.Itoa(MOODLE_PORT)
+		HOST_NAME = foo.Spec.DomainName
 	}
 
 	fmt.Printf("MoodleController.go  : HOST_NAME:%s\n", HOST_NAME)
@@ -651,7 +692,7 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 	namespace := getNamespace(foo)
 	serviceClient := c.kubeclientset.CoreV1().Services(namespace)
 
-	serviceObj := getServiceSpec(moodlePort, deploymentName, foo.Spec.DomainName)
+	serviceObj, servicePort := getServiceSpec(moodlePort, deploymentName, foo.Spec.DomainName)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: deploymentName,
@@ -697,7 +738,7 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 
 	//nodePort1 := result1.Spec.Ports[0].NodePort
 	//nodePort := fmt.Sprint(nodePort1)
-	servicePort := fmt.Sprint(moodlePort)
+	//servicePort := fmt.Sprint(moodlePort)
 
 	// Parse ServiceIP and Port
 	serviceIP := result1.Spec.ClusterIP
@@ -713,9 +754,22 @@ func (c *MoodleController) createService(foo *operatorv1.Moodle) string {
 	return servicePort
 }
 
-func getServiceSpec(moodlePort int, deploymentName, domainName string) apiv1.ServiceSpec {
+func getDomainName(foo *operatorv1.Moodle) string {
+	return foo.Spec.DomainName
+
+/*	if len(foo.Spec.DomainName) > 0 {
+		return foo.Spec.DomainName
+	} else {
+		return foo.Name
+	}
+*/
+}
+
+func getServiceSpec(moodlePort int, deploymentName, domainName string) (apiv1.ServiceSpec, string) {
 
 	var serviceObj apiv1.ServiceSpec
+
+	var servicePort string
 
 	if domainName == "" {
 		serviceObj = apiv1.ServiceSpec{
@@ -734,13 +788,15 @@ func getServiceSpec(moodlePort int, deploymentName, domainName string) apiv1.Ser
 			Type: apiv1.ServiceTypeNodePort,
 			//Type: apiv1.ServiceTypeClusterIP,
 			//Type: apiv1.ServiceTypeLoadBalancer,
-		} 
+		}
+		servicePort = strconv.Itoa(moodlePort)
 	} else {
 		serviceObj = apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{
 					Name:       "my-port",
-					Port:       int32(moodlePort),
+					//Port:       int32(moodlePort),
+					Port: 80,
 					TargetPort: apiutil.FromInt(moodlePort),
 					//NodePort:   int32(MOODLE_PORT),
 					Protocol:   apiv1.ProtocolTCP,
@@ -753,8 +809,9 @@ func getServiceSpec(moodlePort int, deploymentName, domainName string) apiv1.Ser
 			Type: apiv1.ServiceTypeClusterIP,
 			//Type: apiv1.ServiceTypeLoadBalancer,
 		}
+		servicePort = strconv.Itoa(80)
 	}
-	return serviceObj
+	return serviceObj, servicePort
 }
 
 func (c *MoodleController) handlePluginDeployment(moodle *operatorv1.Moodle) (string, []string, []string, []string) {

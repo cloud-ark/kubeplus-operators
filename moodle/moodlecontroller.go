@@ -325,8 +325,14 @@ func (c *MoodleController) syncHandler(key string) error {
 
 	if initialDeployment {
 
+		moodleDomainName := foo.Spec.DomainName
+
+		fmt.Printf("MoodleController.go : Moodle DomainName:%s\n", moodleDomainName)
+
 		MOODLE_PORT = MOODLE_PORT_BASE
 		MOODLE_PORT_BASE = MOODLE_PORT_BASE + 1
+
+		fmt.Printf("MoodleController.go : Moodle Port:%s\n", MOODLE_PORT)
 
 		initialDeployment = false
 
