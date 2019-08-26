@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
       - name: moodle-operator
-        image: lmecld/moodle-operator:0.4.8
+        image: lmecld/moodle-operator:0.4.9
         imagePullPolicy: Always
         command: [ "/moodle"]
         #env:
