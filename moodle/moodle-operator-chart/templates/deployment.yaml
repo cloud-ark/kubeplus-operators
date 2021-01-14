@@ -13,24 +13,7 @@ roleRef:
   name: cluster-admin
   apiGroup: rbac.authorization.k8s.io
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
-kind: CustomResourceDefinition
-metadata:
-  name: moodles.moodlecontroller.kubeplus
-  annotations:
-    platform-as-code/composition: Deployment, Service, PersistentVolume, PersistentVolumeClaim, Secret, Ingress
-    platform-as-code/constants: moodle-operator-implementation-details.implementation_choices
-    platform-as-code/usage: moodle-operator-usage.usage
-    platform-as-code/openapispec: moodle-openapispec.openapispec
-spec:
-  group: moodlecontroller.kubeplus
-  version: v1
-  names:
-    kind: Moodle
-    plural: moodles
-  scope: Namespaced
----
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: moodle-operator-deployment
